@@ -27,11 +27,6 @@
                     <input type="hidden" name="dropoff_lat" id="dropoff_lat">
                     <input type="hidden" name="dropoff_lng" id="dropoff_lng">
                 </div>
-
-                <div class="mb-3">
-                    <label for="pickup_time" class="form-label">Pickup Time</label>
-                    <input type="datetime-local" class="form-control" id="pickup_time" name="pickup_time" required>
-                </div>
                 
                 <div class="mb-3">
                     <label class="form-label">Distance</label>
@@ -96,13 +91,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const pickupInput = document.getElementById('pickup');
     const dropoffInput = document.getElementById('dropoff');
     let debounceTimeout;
-
-    // Set minimum datetime for pickup time
-    const pickupTimeInput = document.getElementById('pickup_time');
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 15); // Set minimum time to 15 minutes from now
-    const minDateTime = now.toISOString().slice(0, 16);
-    pickupTimeInput.min = minDateTime;
 
     function setupAddressInput(input) {
         input.addEventListener('input', function() {
