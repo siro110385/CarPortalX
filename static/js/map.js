@@ -10,9 +10,8 @@ class MapManager {
 
     async searchAddress(query, inputElement) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}`, {
+            const response = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${document.querySelector('meta[name="ors-api-key"]').content}&text=${encodeURIComponent(query)}`, {
                 headers: {
-                    'Authorization': `Bearer ${document.querySelector('meta[name="ors-api-key"]').content}`,
                     'Accept': 'application/json'
                 }
             });
@@ -33,9 +32,8 @@ class MapManager {
 
     async reverseGeocode(lat, lng, type) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?point.lat=${lat}&point.lon=${lng}`, {
+            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?api_key=${document.querySelector('meta[name="ors-api-key"]').content}&point.lat=${lat}&point.lon=${lng}`, {
                 headers: {
-                    'Authorization': `Bearer ${document.querySelector('meta[name="ors-api-key"]').content}`,
                     'Accept': 'application/json'
                 }
             });
@@ -82,15 +80,18 @@ class MapManager {
 
     async calculateRoute(start, end) {
         try {
-            // Ensure coordinates are in the correct order [longitude,latitude]
             const apiKey = document.querySelector('meta[name="ors-api-key"]').content;
-            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
+            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
+                method: 'POST',
                 headers: {
-                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
-                }
+                    'Accept': 'application/json, application/geo+json',
+                    'Content-Type': 'application/json',
+                    'Authorization': apiKey
+                },
+                body: JSON.stringify({
+                    coordinates: [start, end],
+                    format: 'geojson'
+                })
             });
 
             if (!response.ok) {
@@ -99,8 +100,6 @@ class MapManager {
             }
 
             const data = await response.json();
-            
-            // Extract route geometry and distance
             if (!data.features || !data.features[0]) {
                 throw new Error('Invalid response format from API');
             }
@@ -164,7 +163,7 @@ class MapManager {
             this.addMarker(pickupLat, pickupLng, 'Pickup');
             this.addMarker(dropoffLat, dropoffLng, 'Drop-off');
 
-            // Calculate and display route - Note the order: [longitude, latitude]
+            // Calculate and display route
             this.calculateRoute(
                 [pickupLng, pickupLat],
                 [dropoffLng, dropoffLat]
