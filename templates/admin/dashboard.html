@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Admin Dashboard</h2>
+    
+    <ul class="nav nav-tabs mb-4" id="adminTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="users-tab" data-bs-toggle="tab" href="#users" role="tab">Users</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="rides-tab" data-bs-toggle="tab" href="#rides" role="tab">Rides</a>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="adminTabsContent">
+        <div class="tab-pane fade show active" id="users" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>{{ user.username }}</td>
+                            <td>{{ user.email }}</td>
+                            <td>{{ user.user_type }}</td>
+                            <td>{{ 'Active' if user.is_active else 'Inactive' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning toggle-user" data-user-id="{{ user.id }}">
+                                    {{ 'Deactivate' if user.is_active else 'Activate' }}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="tab-pane fade" id="rides" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Rider</th>
+                            <th>Driver</th>
+                            <th>Status</th>
+                            <th>Distance</th>
+                            <th>Fare</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ride in rides %}
+                        <tr>
+                            <td>{{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>{{ ride.rider.username }}</td>
+                            <td>{{ ride.driver.username if ride.driver else 'Not assigned' }}</td>
+                            <td>{{ ride.status }}</td>
+                            <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
+                            <td>${{ '%.2f'|format(ride.fare|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
