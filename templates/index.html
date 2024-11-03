@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <h1 class="display-4 mb-4">Welcome to Car Booking Portal</h1>
+            <p class="lead mb-4">Book your ride with ease and convenience</p>
+            
+            {% if current_user.is_authenticated %}
+                {% if current_user.user_type == 'rider' %}
+                    <div class="d-grid gap-2 col-6 mx-auto">
+                        <a href="{{ url_for('main.book_ride') }}" class="btn btn-primary btn-lg">Book a Ride</a>
+                        <a href="{{ url_for('main.rider_dashboard') }}" class="btn btn-outline-secondary btn-lg">View Dashboard</a>
+                    </div>
+                {% elif current_user.user_type == 'driver' %}
+                    <div class="d-grid gap-2 col-6 mx-auto">
+                        <a href="{{ url_for('main.driver_dashboard') }}" class="btn btn-primary btn-lg">Driver Dashboard</a>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="d-grid gap-2 col-6 mx-auto">
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-lg">Login</a>
+                    <a href="{{ url_for('auth.register') }}" class="btn btn-outline-secondary btn-lg">Register</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

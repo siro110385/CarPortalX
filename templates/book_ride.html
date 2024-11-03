@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Book a Ride</h2>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <form method="POST" id="bookingForm">
+                <div class="mb-3">
+                    <label for="pickup" class="form-label">Pickup Location</label>
+                    <input type="text" class="form-control" id="pickup" required>
+                    <input type="hidden" name="pickup_lat" id="pickup_lat">
+                    <input type="hidden" name="pickup_lng" id="pickup_lng">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="dropoff" class="form-label">Drop-off Location</label>
+                    <input type="text" class="form-control" id="dropoff" required>
+                    <input type="hidden" name="dropoff_lat" id="dropoff_lat">
+                    <input type="hidden" name="dropoff_lng" id="dropoff_lng">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Distance</label>
+                    <p id="distance" class="form-control-static">0.00 km</p>
+                    <input type="hidden" name="distance" id="distance_value">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Estimated Fare</label>
+                    <p id="fare" class="form-control-static">$0.00</p>
+                </div>
+                
+                <input type="hidden" name="route_data" id="route_data">
+                <button type="submit" class="btn btn-primary" id="bookButton" disabled>Book Ride</button>
+            </form>
+        </div>
+        
+        <div class="col-md-8">
+            <div id="map" style="height: 500px;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const map = new MapManager('map');
+    const bookingForm = document.getElementById('bookingForm');
+    
+    async function updateRoute() {
+        const pickup = document.getElementById('pickup').value;
+        const dropoff = document.getElementById('dropoff').value;
+        
+        if (pickup && dropoff) {
+            try {
+                // Get coordinates
+                const pickupCoords = await map.geocodeAddress(pickup);
+                const dropoffCoords = await map.geocodeAddress(dropoff);
+                
+                // Update hidden inputs
+                document.getElementById('pickup_lat').value = pickupCoords[1];
+                document.getElementById('pickup_lng').value = pickupCoords[0];
+                document.getElementById('dropoff_lat').value = dropoffCoords[1];
+                document.getElementById('dropoff_lng').value = dropoffCoords[0];
+                
+                // Calculate and display route
+                const routeData = await map.calculateRoute(pickupCoords, dropoffCoords);
+                map.displayRoute(routeData.route);
+                
+                // Update distance and fare
+                const distance = routeData.distance / 1000; // Convert to km
+                document.getElementById('distance').textContent = distance.toFixed(2) + ' km';
+                document.getElementById('distance_value').value = distance;
+                
+                // Calculate fare ($2 per km + $5 base fare)
+                const fare = (distance * 2) + 5;
+                document.getElementById('fare').textContent = '$' + fare.toFixed(2);
+                
+                // Store route data
+                document.getElementById('route_data').value = JSON.stringify(routeData.route);
+                
+                // Enable book button
+                document.getElementById('bookButton').disabled = false;
+            } catch (error) {
+                console.error('Error updating route:', error);
+            }
+        }
+    }
+    
+    document.getElementById('pickup').addEventListener('change', updateRoute);
+    document.getElementById('dropoff').addEventListener('change', updateRoute);
+});
+</script>
+{% endblock %}
