@@ -23,8 +23,11 @@ def rider_dashboard():
 def driver_dashboard():
     if current_user.user_type != 'driver':
         return redirect(url_for('main.index'))
-    rides = Ride.query.filter_by(driver_id=current_user.id).order_by(Ride.created_at.desc()).all()
-    return render_template('driver/dashboard.html', rides=rides)
+    # Get driver's own rides
+    my_rides = Ride.query.filter_by(driver_id=current_user.id).order_by(Ride.created_at.desc()).all()
+    # Get all pending rides that haven't been assigned to a driver
+    pending_rides = Ride.query.filter_by(driver_id=None, status='pending').order_by(Ride.created_at.desc()).all()
+    return render_template('driver/dashboard.html', my_rides=my_rides, pending_rides=pending_rides)
 
 @main_bp.route('/admin/dashboard')
 @login_required
@@ -70,3 +73,46 @@ def book_ride():
         return redirect(url_for('main.rider_dashboard'))
         
     return render_template('book_ride.html')
+
+@main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
+@login_required
+def cancel_ride(ride_id):
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.rider_id != current_user.id:
+        flash('Unauthorized action')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if ride.status == 'pending':
+        ride.status = 'cancelled'
+        db.session.commit()
+        flash('Ride cancelled successfully')
+    else:
+        flash('Cannot cancel ride in current status')
+    return redirect(url_for('main.rider_dashboard'))
+
+@main_bp.route('/ride/<int:ride_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_ride(ride_id):
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.rider_id != current_user.id:
+        flash('Unauthorized action')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if request.method == 'POST':
+        if ride.status != 'pending':
+            flash('Cannot edit ride in current status')
+            return redirect(url_for('main.rider_dashboard'))
+            
+        ride.pickup_lat = float(request.form.get('pickup_lat'))
+        ride.pickup_lng = float(request.form.get('pickup_lng'))
+        ride.dropoff_lat = float(request.form.get('dropoff_lat'))
+        ride.dropoff_lng = float(request.form.get('dropoff_lng'))
+        ride.distance = float(request.form.get('distance', 0))
+        ride.route_data = request.form.get('route_data')
+        ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
+        
+        db.session.commit()
+        flash('Ride updated successfully')
+        return redirect(url_for('main.rider_dashboard'))
+        
+    return render_template('edit_ride.html', ride=ride)
