@@ -116,3 +116,53 @@ def edit_ride(ride_id):
         return redirect(url_for('main.rider_dashboard'))
         
     return render_template('edit_ride.html', ride=ride)
+
+@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
+@login_required
+def accept_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.status != 'pending':
+        return jsonify({'error': 'Ride already accepted'}), 400
+        
+    ride.driver_id = current_user.id
+    ride.status = 'accepted'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride accepted successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
+@login_required
+def start_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    if ride.status != 'accepted':
+        return jsonify({'error': 'Cannot start ride in current status'}), 400
+        
+    ride.status = 'in_progress'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride started successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
+@login_required
+def complete_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    if ride.status != 'in_progress':
+        return jsonify({'error': 'Cannot complete ride in current status'}), 400
+        
+    ride.status = 'completed'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride completed successfully'})
