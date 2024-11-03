@@ -1,6 +1,6 @@
 class MapManager {
     constructor(mapId) {
-        this.map = L.map(mapId).setView([37.7749, -122.4194], 12); // Default to San Francisco
+        this.map = L.map(mapId).setView([37.7749, -122.4194], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
         this.routeLayer = null;
         this.markers = [];
@@ -62,12 +62,12 @@ class MapManager {
         }
     }
 
-    async calculateRoute(start, end) {
+    async calculateRouteWithStops(points) {
         try {
-            const startCoords = `${start[0]},${start[1]}`;  // longitude,latitude
-            const endCoords = `${end[0]},${end[1]}`;        // longitude,latitude
+            // Format coordinates for API
+            const coordinates = points.map(p => p.join(',')).join(';');
             
-            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${this.apiKey}&start=${startCoords}&end=${endCoords}`;
+            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${this.apiKey}&coordinates=${coordinates}`;
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -82,18 +82,17 @@ class MapManager {
             }
 
             const data = await response.json();
-            
-            // Extract route geometry and distance from response
             if (!data.features || !data.features[0]) {
                 throw new Error('Invalid response format from API');
             }
 
-            // Convert distance from meters to kilometers
-            const distanceInKm = data.features[0].properties.segments[0].distance / 1000;
+            const totalDistance = data.features[0].properties.segments.reduce(
+                (acc, segment) => acc + segment.distance, 0
+            ) / 1000;  // Convert to km
 
             return {
                 route: data.features[0].geometry,
-                distance: distanceInKm
+                distance: totalDistance
             };
         } catch (error) {
             console.error('Route calculation failed:', error);
@@ -123,6 +122,38 @@ class MapManager {
         }
     }
 
+    initStops() {
+        const addStopBtn = document.getElementById('addStop');
+        const stopsContainer = document.getElementById('stops-list');
+        const template = document.getElementById('stop-template');
+
+        addStopBtn.addEventListener('click', () => {
+            const stopEntry = template.content.cloneNode(true);
+            stopsContainer.appendChild(stopEntry);
+            
+            const input = stopsContainer.lastElementChild.querySelector('.stop-input');
+            this.setupAddressInput(input);
+            
+            const removeBtn = stopsContainer.lastElementChild.querySelector('.remove-stop');
+            removeBtn.addEventListener('click', (e) => {
+                e.target.closest('.stop-entry').remove();
+                this.updateRoute();
+            });
+        });
+    }
+
+    setupAddressInput(input) {
+        input.addEventListener('input', () => {
+            clearTimeout(this.debounceTimeout);
+            this.debounceTimeout = setTimeout(() => {
+                const query = input.value.trim();
+                if (query.length >= 3) {
+                    this.searchAddress(query, input);
+                }
+            }, 300);
+        });
+    }
+
     showAutocompleteResults(features, inputElement) {
         const dropdownId = `${inputElement.id}-dropdown`;
         let dropdown = document.getElementById(dropdownId);
@@ -142,8 +173,16 @@ class MapManager {
             li.addEventListener('click', () => {
                 inputElement.value = feature.properties.label;
                 const coords = feature.geometry.coordinates;
-                this.updateLocationFields(inputElement.id, coords[1], coords[0]);
+                if (inputElement.classList.contains('stop-input')) {
+                    const stopEntry = inputElement.closest('.stop-entry');
+                    stopEntry.querySelector('.stop-lat').value = coords[1];
+                    stopEntry.querySelector('.stop-lng').value = coords[0];
+                    stopEntry.querySelector('.stop-address').value = feature.properties.label;
+                } else {
+                    this.updateLocationFields(inputElement.id, coords[1], coords[0]);
+                }
                 dropdown.style.display = 'none';
+                this.updateRoute();
             });
             dropdown.appendChild(li);
         });
@@ -155,10 +194,10 @@ class MapManager {
         const type = inputId.includes('pickup') ? 'pickup' : 'dropoff';
         document.getElementById(`${type}_lat`).value = lat;
         document.getElementById(`${type}_lng`).value = lng;
-        this.updateMarkerAndRoute();
+        this.updateRoute();
     }
 
-    updateMarkerAndRoute() {
+    async updateRoute() {
         const pickupLat = parseFloat(document.getElementById('pickup_lat').value);
         const pickupLng = parseFloat(document.getElementById('pickup_lng').value);
         const dropoffLat = parseFloat(document.getElementById('dropoff_lat').value);
@@ -167,25 +206,34 @@ class MapManager {
         if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
             this.clearMarkers();
             
-            // Add markers
-            this.addMarker(pickupLat, pickupLng, 'Pickup');
-            this.addMarker(dropoffLat, dropoffLng, 'Drop-off');
+            // Collect all stops
+            const stops = Array.from(document.querySelectorAll('.stop-entry')).map(entry => {
+                const lat = parseFloat(entry.querySelector('.stop-lat').value);
+                const lng = parseFloat(entry.querySelector('.stop-lng').value);
+                return [lng, lat];  // ORS expects [longitude, latitude]
+            }).filter(coords => !isNaN(coords[0]) && !isNaN(coords[1]));
 
-            // Calculate and display route
-            this.calculateRoute(
-                [pickupLng, pickupLat],
-                [dropoffLng, dropoffLat]
-            )
-            .then(routeData => {
+            // Prepare all points in order
+            const points = [[pickupLng, pickupLat], ...stops, [dropoffLng, dropoffLat]];
+            
+            try {
+                const routeData = await this.calculateRouteWithStops(points);
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
                 document.getElementById('route_data').value = JSON.stringify(routeData.route);
                 document.getElementById('bookButton').disabled = false;
-            })
-            .catch(error => {
+
+                // Add markers for all points
+                this.addMarker(pickupLat, pickupLng, 'Pickup');
+                stops.forEach((stop, index) => {
+                    this.addMarker(stop[1], stop[0], `Stop ${index + 1}`);
+                });
+                this.addMarker(dropoffLat, dropoffLng, 'Drop-off');
+            } catch (error) {
                 console.error('Error updating route:', error);
+                this.showError('Unable to calculate route. Please try different locations.');
                 document.getElementById('bookButton').disabled = true;
-            });
+            }
         }
     }
 
