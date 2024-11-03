@@ -62,6 +62,46 @@ class MapManager {
         }
     }
 
+    async calculateRoute(start, end) {
+        try {
+            const startCoords = `${start[0]},${start[1]}`;  // longitude,latitude
+            const endCoords = `${end[0]},${end[1]}`;        // longitude,latitude
+            
+            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${this.apiKey}&start=${startCoords}&end=${endCoords}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Route calculation failed: ${errorData.error || response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            // Extract route geometry and distance from response
+            if (!data.features || !data.features[0]) {
+                throw new Error('Invalid response format from API');
+            }
+
+            // Convert distance from meters to kilometers
+            const distanceInKm = data.features[0].properties.segments[0].distance / 1000;
+
+            return {
+                route: data.features[0].geometry,
+                distance: distanceInKm
+            };
+        } catch (error) {
+            console.error('Route calculation failed:', error);
+            this.showError('Unable to calculate route. Please try different locations.');
+            throw error;
+        }
+    }
+
     initGeolocation() {
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
@@ -80,42 +120,6 @@ class MapManager {
                     this.showError('Could not detect your location.');
                 }
             );
-        }
-    }
-
-    async calculateRoute(start, end) {
-        try {
-            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json, application/geo+json',
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`
-                },
-                body: JSON.stringify({
-                    coordinates: [start, end],
-                    format: 'geojson'
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Route calculation failed: ${errorData.error || response.statusText}`);
-            }
-
-            const data = await response.json();
-            if (!data.features || !data.features[0]) {
-                throw new Error('Invalid response format from API');
-            }
-
-            return {
-                route: data.features[0].geometry,
-                distance: data.features[0].properties.summary.distance
-            };
-        } catch (error) {
-            console.error('Route calculation failed:', error);
-            this.showError('Unable to calculate route. Please try different locations.');
-            throw error;
         }
     }
 
@@ -194,12 +198,11 @@ class MapManager {
     }
 
     updateDistanceAndFare(distance) {
-        const distanceKm = distance / 1000;
-        document.getElementById('distance').textContent = `${distanceKm.toFixed(2)} km`;
-        document.getElementById('distance_value').value = distanceKm.toFixed(2);
+        document.getElementById('distance').textContent = `${distance.toFixed(2)} km`;
+        document.getElementById('distance_value').value = distance.toFixed(2);
         
         // Calculate fare ($2 per km + $5 base fare)
-        const fare = (distanceKm * 2) + 5;
+        const fare = (distance * 2) + 5;
         document.getElementById('fare').textContent = `$${fare.toFixed(2)}`;
     }
 
