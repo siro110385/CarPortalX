@@ -1,6 +1,5 @@
 from flask import Flask
 from extensions import db, login_manager
-from flask_migrate import Migrate
 
 def create_app():
     app = Flask(__name__)
@@ -9,9 +8,6 @@ def create_app():
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
-    
-    # Initialize Flask-Migrate
-    migrate = Migrate(app, db)
     
     with app.app_context():
         from auth import auth_bp

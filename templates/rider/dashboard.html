@@ -13,37 +13,22 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th>Date and Time</th>
+                    <th>Date</th>
                     <th>Status</th>
                     <th>Driver</th>
-                    <th>Pickup Location</th>
-                    <th>Drop-off Location</th>
                     <th>Distance</th>
+                    <th>Fare</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for ride in rides %}
                 <tr>
-                    <td>
-                        Created: {{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}<br>
-                        {% if ride.pickup_time %}
-                        Pickup: {{ ride.pickup_time.strftime('%Y-%m-%d %H:%M') }}
-                        {% endif %}
-                    </td>
+                    <td>{{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>{{ ride.status }}</td>
                     <td>{{ ride.driver.username if ride.driver else 'Not assigned' }}</td>
-                    <td>
-                        <a href="#" class="showOnMap" data-lat="{{ ride.pickup_lat }}" data-lng="{{ ride.pickup_lng }}">
-                            <div id="pickup_address_{{ ride.id }}">Loading...</div>
-                        </a>
-                    </td>
-                    <td>
-                        <a href="#" class="showOnMap" data-lat="{{ ride.dropoff_lat }}" data-lng="{{ ride.dropoff_lng }}">
-                            <div id="dropoff_address_{{ ride.id }}">Loading...</div>
-                        </a>
-                    </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
+                    <td>${{ '%.2f'|format(ride.fare|float) }}</td>
                     <td>
                         {% if ride.status == 'pending' %}
                             <form method="POST" action="{{ url_for('main.cancel_ride', ride_id=ride.id) }}" style="display:inline;">
@@ -58,43 +43,4 @@
         </table>
     </div>
 </div>
-
-<meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Reverse geocode addresses
-    const addresses = document.querySelectorAll('[id^="pickup_address_"], [id^="dropoff_address_"]');
-    addresses.forEach(async (div) => {
-        const lat = div.closest('a').dataset.lat;
-        const lng = div.closest('a').dataset.lng;
-        try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?point.lat=${lat}&point.lon=${lng}`, {
-                headers: {
-                    'Authorization': document.querySelector('meta[name="ors-api-key"]').content
-                }
-            });
-            const data = await response.json();
-            if (data.features && data.features.length > 0) {
-                div.textContent = data.features[0].properties.label;
-            }
-        } catch (error) {
-            console.error('Reverse geocoding failed:', error);
-            div.textContent = `${lat}, ${lng}`;
-        }
-    });
-
-    // Show location on map when clicked
-    document.querySelectorAll('.showOnMap').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const lat = this.dataset.lat;
-            const lng = this.dataset.lng;
-            alert(`Location: ${lat}, ${lng}`);
-        });
-    });
-});
-</script>
 {% endblock %}
