@@ -80,6 +80,41 @@ class MapManager {
         }
     }
 
+    async calculateRoute(start, end) {
+        try {
+            // Convert coordinates to the correct format [longitude,latitude]
+            const startCoords = `${start[0]},${start[1]}`;
+            const endCoords = `${end[0]},${end[1]}`;
+            
+            const apiKey = document.querySelector('meta[name="ors-api-key"]').content;
+            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${startCoords}&end=${endCoords}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Route calculation failed: ${errorData.error || response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            // Extract route geometry and distance from response
+            return {
+                route: data.features[0].geometry,
+                distance: data.features[0].properties.summary.distance
+            };
+        } catch (error) {
+            console.error('Route calculation failed:', error);
+            this.showError('Unable to calculate route. Please try different locations.');
+            throw error;
+        }
+    }
+
     showAutocompleteResults(features, inputElement) {
         const dropdownId = `${inputElement.id}-dropdown`;
         let dropdown = document.getElementById(dropdownId);
@@ -113,38 +148,6 @@ class MapManager {
         document.getElementById(`${type}_lat`).value = lat;
         document.getElementById(`${type}_lng`).value = lng;
         this.updateMarkerAndRoute();
-        document.getElementById('bookButton').disabled = false;
-    }
-
-    async calculateRoute(start, end) {
-        try {
-            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${document.querySelector('meta[name="ors-api-key"]').content}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    coordinates: [[start[1], start[0]], [end[1], end[0]]],
-                    format: 'geojson'
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Route calculation failed: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            return {
-                route: data.features[0].geometry,
-                distance: data.features[0].properties.segments[0].distance
-            };
-        } catch (error) {
-            console.error('Route calculation failed:', error);
-            this.showError('Unable to calculate route. Please try different locations.');
-            throw error;
-        }
     }
 
     updateMarkerAndRoute() {
@@ -166,9 +169,11 @@ class MapManager {
                     this.displayRoute(routeData.route);
                     this.updateDistanceAndFare(routeData.distance);
                     document.getElementById('route_data').value = JSON.stringify(routeData.route);
+                    document.getElementById('bookButton').disabled = false;
                 })
                 .catch(error => {
                     console.error('Error updating route:', error);
+                    document.getElementById('bookButton').disabled = true;
                 });
         }
     }
@@ -184,7 +189,7 @@ class MapManager {
     updateDistanceAndFare(distance) {
         const distanceKm = distance / 1000;
         document.getElementById('distance').textContent = `${distanceKm.toFixed(2)} km`;
-        document.getElementById('distance_value').value = distanceKm;
+        document.getElementById('distance_value').value = distanceKm.toFixed(2);
         
         // Calculate fare ($2 per km + $5 base fare)
         const fare = (distanceKm * 2) + 5;
