@@ -26,6 +26,15 @@
                     <input type="datetime-local" class="form-control" id="pickup_datetime" name="pickup_datetime" required
                            min="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
                 </div>
+
+                <!-- Stops Container -->
+                <div id="stops-container">
+                    <h4>Stops</h4>
+                    <div id="stops-list"></div>
+                    <button type="button" class="btn btn-secondary mb-3" id="addStop">
+                        <i class="fas fa-plus"></i> Add Stop
+                    </button>
+                </div>
                 
                 <div class="mb-3 position-relative">
                     <label for="dropoff" class="form-label">Drop-off Location</label>
@@ -55,6 +64,22 @@
         </div>
     </div>
 </div>
+
+<!-- Add stop template -->
+<template id="stop-template">
+    <div class="mb-3 position-relative stop-entry">
+        <label class="form-label">Stop Location</label>
+        <div class="input-group">
+            <input type="text" class="form-control stop-input" required autocomplete="off">
+            <button type="button" class="btn btn-danger remove-stop">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <input type="hidden" class="stop-lat" name="stop_lat[]">
+        <input type="hidden" class="stop-lng" name="stop_lng[]">
+        <input type="hidden" class="stop-address" name="stop_address[]">
+    </div>
+</template>
 
 <meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
 
@@ -92,7 +117,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
-    map.initGeolocation();  // Initialize geolocation
+    map.initGeolocation();
+    map.initStops();
     
     const pickupInput = document.getElementById('pickup');
     const dropoffInput = document.getElementById('dropoff');
@@ -109,7 +135,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         });
 
-        // Hide dropdown when clicking outside
         document.addEventListener('click', function(e) {
             if (!input.contains(e.target)) {
                 const dropdownId = `${input.id}-dropdown`;
@@ -124,7 +149,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setupAddressInput(pickupInput);
     setupAddressInput(dropoffInput);
 
-    // Add click handler for location button
     document.getElementById('useMyLocation').addEventListener('click', function() {
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
@@ -139,7 +163,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Form submission
     document.getElementById('bookingForm').addEventListener('submit', function(e) {
         const pickupLat = document.getElementById('pickup_lat').value;
         const dropoffLat = document.getElementById('dropoff_lat').value;
@@ -148,11 +171,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!pickupLat || !dropoffLat) {
             e.preventDefault();
             map.showError('Please select valid pickup and drop-off locations from the suggestions.');
+            return;
         }
         
         if (pickupDateTime < new Date()) {
             e.preventDefault();
             map.showError('Pickup time must be in the future.');
+            return;
+        }
+
+        // Validate all stops have addresses
+        const stopInputs = document.querySelectorAll('.stop-input');
+        for (let input of stopInputs) {
+            if (!input.value.trim()) {
+                e.preventDefault();
+                map.showError('Please fill in all stop locations.');
+                return;
+            }
         }
     });
 });

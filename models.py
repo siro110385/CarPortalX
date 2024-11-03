@@ -24,6 +24,15 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+class RideStop(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ride_id = db.Column(db.Integer, db.ForeignKey('ride.id'), nullable=False)
+    sequence = db.Column(db.Integer, nullable=False)  # Order of stops
+    lat = db.Column(db.Float, nullable=False)
+    lng = db.Column(db.Float, nullable=False)
+    address = db.Column(db.String(256))
+    stop_type = db.Column(db.String(20))  # 'pickup', 'stop', 'dropoff'
+
 class Ride(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rider_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -37,7 +46,8 @@ class Ride(db.Model):
     distance = db.Column(db.Float)  # in kilometers
     fare = db.Column(db.Float)
     route_data = db.Column(db.JSON)  # Store route coordinates
-    pickup_datetime = db.Column(db.DateTime, nullable=False)  # Added new field
+    pickup_datetime = db.Column(db.DateTime, nullable=False)
 
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
     driver = db.relationship('User', foreign_keys=[driver_id], backref='rides_as_driver')
+    stops = db.relationship('RideStop', backref='ride', order_by='RideStop.sequence')
