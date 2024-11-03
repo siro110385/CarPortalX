@@ -11,7 +11,12 @@
             <form method="POST" id="bookingForm">
                 <div class="mb-3 position-relative">
                     <label for="pickup" class="form-label">Pickup Location</label>
-                    <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                        <button type="button" class="btn btn-secondary" id="useMyLocation">
+                            <i class="fas fa-location-arrow"></i> Use My Location
+                        </button>
+                    </div>
                     <input type="hidden" name="pickup_lat" id="pickup_lat" value="{{ ride.pickup_lat }}">
                     <input type="hidden" name="pickup_lng" id="pickup_lng" value="{{ ride.pickup_lng }}">
                 </div>
@@ -47,6 +52,34 @@
 </div>
 
 <meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
+
+<style>
+.address-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 4px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.address-dropdown li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.address-dropdown li:hover {
+    background: var(--bs-primary-bg-subtle);
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -54,11 +87,79 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
+    
     // Initialize with existing ride data
     const routeData = JSON.parse(document.getElementById('route_data').value || '{}');
-    if (routeData) {
+    const pickupLat = parseFloat(document.getElementById('pickup_lat').value);
+    const pickupLng = parseFloat(document.getElementById('pickup_lng').value);
+    const dropoffLat = parseFloat(document.getElementById('dropoff_lat').value);
+    const dropoffLng = parseFloat(document.getElementById('dropoff_lng').value);
+
+    // Reverse geocode to get addresses
+    if (pickupLat && pickupLng) {
+        map.reverseGeocode(pickupLat, pickupLng, 'pickup');
+        map.addMarker(pickupLat, pickupLng, 'Pickup');
+    }
+    if (dropoffLat && dropoffLng) {
+        map.reverseGeocode(dropoffLat, dropoffLng, 'dropoff');
+        map.addMarker(dropoffLat, dropoffLng, 'Drop-off');
+    }
+    if (routeData.coordinates) {
         map.displayRoute(routeData);
     }
+
+    function setupAddressInput(input) {
+        input.addEventListener('input', function() {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                const query = this.value.trim();
+                if (query.length >= 3) {
+                    map.searchAddress(query, this);
+                }
+            }, 300);
+        });
+
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target)) {
+                const dropdownId = `${input.id}-dropdown`;
+                const dropdown = document.getElementById(dropdownId);
+                if (dropdown) {
+                    dropdown.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    let debounceTimeout;
+    setupAddressInput(document.getElementById('pickup'));
+    setupAddressInput(document.getElementById('dropoff'));
+
+    // Add click handler for location button
+    document.getElementById('useMyLocation').addEventListener('click', function() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    map.reverseGeocode(latitude, longitude, 'pickup');
+                },
+                (error) => {
+                    map.showError('Could not detect your location.');
+                }
+            );
+        }
+    });
+
+    // Form submission
+    document.getElementById('bookingForm').addEventListener('submit', function(e) {
+        const pickupLat = document.getElementById('pickup_lat').value;
+        const dropoffLat = document.getElementById('dropoff_lat').value;
+        
+        if (!pickupLat || !dropoffLat) {
+            e.preventDefault();
+            map.showError('Please select valid pickup and drop-off locations from the suggestions.');
+        }
+    });
 });
 </script>
 {% endblock %}
