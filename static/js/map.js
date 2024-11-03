@@ -6,13 +6,16 @@ class MapManager {
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
+        this.apiKey = document.querySelector('meta[name="ors-api-key"]').content;
     }
 
     async searchAddress(query, inputElement) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${document.querySelector('meta[name="ors-api-key"]').content}&text=${encodeURIComponent(query)}`, {
+            const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}&size=5`, {
+                method: 'GET',
                 headers: {
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
                 }
             });
 
@@ -32,9 +35,11 @@ class MapManager {
 
     async reverseGeocode(lat, lng, type) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?api_key=${document.querySelector('meta[name="ors-api-key"]').content}&point.lat=${lat}&point.lon=${lng}`, {
+            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?point.lat=${lat}&point.lon=${lng}`, {
+                method: 'GET',
                 headers: {
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
                 }
             });
 
@@ -80,13 +85,12 @@ class MapManager {
 
     async calculateRoute(start, end) {
         try {
-            const apiKey = document.querySelector('meta[name="ors-api-key"]').content;
             const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json, application/geo+json',
                     'Content-Type': 'application/json',
-                    'Authorization': apiKey
+                    'Authorization': `Bearer ${this.apiKey}`
                 },
                 body: JSON.stringify({
                     coordinates: [start, end],

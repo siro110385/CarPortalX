@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import User, Ride
 import requests
+from datetime import datetime
 
 main_bp = Blueprint('main', __name__)
 
@@ -51,6 +52,7 @@ def book_ride():
         dropoff_lng = float(request.form.get('dropoff_lng'))
         distance = float(request.form.get('distance', 0))
         route_data = request.form.get('route_data')
+        pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
         
         # Calculate fare (example: $2 per km + base fare of $5)
         fare = (distance * 2) + 5
@@ -63,7 +65,8 @@ def book_ride():
             dropoff_lng=dropoff_lng,
             distance=distance,
             fare=fare,
-            route_data=route_data
+            route_data=route_data,
+            pickup_datetime=pickup_datetime
         )
         
         db.session.add(ride)
@@ -72,7 +75,7 @@ def book_ride():
         flash('Ride booked successfully!')
         return redirect(url_for('main.rider_dashboard'))
         
-    return render_template('book_ride.html')
+    return render_template('book_ride.html', now=datetime.now())
 
 @main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
 @login_required
@@ -109,13 +112,14 @@ def edit_ride(ride_id):
         ride.dropoff_lng = float(request.form.get('dropoff_lng'))
         ride.distance = float(request.form.get('distance', 0))
         ride.route_data = request.form.get('route_data')
+        ride.pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
         ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
         
         db.session.commit()
         flash('Ride updated successfully')
         return redirect(url_for('main.rider_dashboard'))
         
-    return render_template('edit_ride.html', ride=ride)
+    return render_template('edit_ride.html', ride=ride, now=datetime.now())
 
 @main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
 @login_required
