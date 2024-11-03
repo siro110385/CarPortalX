@@ -24,6 +24,7 @@
             <thead>
                 <tr>
                     <th>Date</th>
+                    <th>Pickup Time</th>
                     <th>Status</th>
                     <th>Rider</th>
                     <th>Distance</th>
@@ -35,6 +36,7 @@
                 {% for ride in my_rides %}
                 <tr>
                     <td>{{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ ride.pickup_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>{{ ride.status }}</td>
                     <td>{{ ride.rider.username }}</td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
@@ -58,6 +60,7 @@
             <thead>
                 <tr>
                     <th>Date</th>
+                    <th>Pickup Time</th>
                     <th>Rider</th>
                     <th>Distance</th>
                     <th>Fare</th>
@@ -68,6 +71,7 @@
                 {% for ride in pending_rides %}
                 <tr>
                     <td>{{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ ride.pickup_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>{{ ride.rider.username }}</td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>

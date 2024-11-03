@@ -20,6 +20,12 @@
                     <input type="hidden" name="pickup_lat" id="pickup_lat">
                     <input type="hidden" name="pickup_lng" id="pickup_lng">
                 </div>
+
+                <div class="mb-3">
+                    <label for="pickup_datetime" class="form-label">Pickup Date & Time</label>
+                    <input type="datetime-local" class="form-control" id="pickup_datetime" name="pickup_datetime" required
+                           min="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
+                </div>
                 
                 <div class="mb-3 position-relative">
                     <label for="dropoff" class="form-label">Drop-off Location</label>
@@ -137,10 +143,16 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('bookingForm').addEventListener('submit', function(e) {
         const pickupLat = document.getElementById('pickup_lat').value;
         const dropoffLat = document.getElementById('dropoff_lat').value;
+        const pickupDateTime = new Date(document.getElementById('pickup_datetime').value);
         
         if (!pickupLat || !dropoffLat) {
             e.preventDefault();
             map.showError('Please select valid pickup and drop-off locations from the suggestions.');
+        }
+        
+        if (pickupDateTime < new Date()) {
+            e.preventDefault();
+            map.showError('Pickup time must be in the future.');
         }
     });
 });

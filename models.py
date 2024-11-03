@@ -37,6 +37,7 @@ class Ride(db.Model):
     distance = db.Column(db.Float)  # in kilometers
     fare = db.Column(db.Float)
     route_data = db.Column(db.JSON)  # Store route coordinates
+    pickup_datetime = db.Column(db.DateTime, nullable=False)  # Added new field
 
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
     driver = db.relationship('User', foreign_keys=[driver_id], backref='rides_as_driver')
