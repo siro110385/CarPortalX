@@ -17,6 +17,7 @@
                     <th>Pickup Time</th>
                     <th>Status</th>
                     <th>Driver</th>
+                    <th>Route Details</th>
                     <th>Distance</th>
                     <th>Fare</th>
                     <th>Actions</th>
@@ -29,6 +30,13 @@
                     <td>{{ ride.pickup_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>{{ ride.status }}</td>
                     <td>{{ ride.driver.username if ride.driver else 'Not assigned' }}</td>
+                    <td>
+                        <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
+                        {% for stop in ride.stops[1:-1] %}
+                            <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
+                        {% endfor %}
+                        <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                    </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>
                     <td>
