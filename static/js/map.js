@@ -82,12 +82,9 @@ class MapManager {
 
     async calculateRoute(start, end) {
         try {
-            // Convert coordinates to the correct format [longitude,latitude]
-            const startCoords = `${start[0]},${start[1]}`;
-            const endCoords = `${end[0]},${end[1]}`;
-            
+            // Ensure coordinates are in the correct order [longitude,latitude]
             const apiKey = document.querySelector('meta[name="ors-api-key"]').content;
-            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${startCoords}&end=${endCoords}`;
+            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${apiKey}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`;
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -103,7 +100,11 @@ class MapManager {
 
             const data = await response.json();
             
-            // Extract route geometry and distance from response
+            // Extract route geometry and distance
+            if (!data.features || !data.features[0]) {
+                throw new Error('Invalid response format from API');
+            }
+
             return {
                 route: data.features[0].geometry,
                 distance: data.features[0].properties.summary.distance
@@ -151,10 +152,10 @@ class MapManager {
     }
 
     updateMarkerAndRoute() {
-        const pickupLat = document.getElementById('pickup_lat').value;
-        const pickupLng = document.getElementById('pickup_lng').value;
-        const dropoffLat = document.getElementById('dropoff_lat').value;
-        const dropoffLng = document.getElementById('dropoff_lng').value;
+        const pickupLat = parseFloat(document.getElementById('pickup_lat').value);
+        const pickupLng = parseFloat(document.getElementById('pickup_lng').value);
+        const dropoffLat = parseFloat(document.getElementById('dropoff_lat').value);
+        const dropoffLng = parseFloat(document.getElementById('dropoff_lng').value);
 
         if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
             this.clearMarkers();
@@ -163,18 +164,21 @@ class MapManager {
             this.addMarker(pickupLat, pickupLng, 'Pickup');
             this.addMarker(dropoffLat, dropoffLng, 'Drop-off');
 
-            // Calculate and display route
-            this.calculateRoute([pickupLng, pickupLat], [dropoffLng, dropoffLat])
-                .then(routeData => {
-                    this.displayRoute(routeData.route);
-                    this.updateDistanceAndFare(routeData.distance);
-                    document.getElementById('route_data').value = JSON.stringify(routeData.route);
-                    document.getElementById('bookButton').disabled = false;
-                })
-                .catch(error => {
-                    console.error('Error updating route:', error);
-                    document.getElementById('bookButton').disabled = true;
-                });
+            // Calculate and display route - Note the order: [longitude, latitude]
+            this.calculateRoute(
+                [pickupLng, pickupLat],
+                [dropoffLng, dropoffLat]
+            )
+            .then(routeData => {
+                this.displayRoute(routeData.route);
+                this.updateDistanceAndFare(routeData.distance);
+                document.getElementById('route_data').value = JSON.stringify(routeData.route);
+                document.getElementById('bookButton').disabled = false;
+            })
+            .catch(error => {
+                console.error('Error updating route:', error);
+                document.getElementById('bookButton').disabled = true;
+            });
         }
     }
 
