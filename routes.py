@@ -3,6 +3,7 @@ from flask_login import login_required, current_user
 from extensions import db
 from models import User, Ride
 import requests
+from datetime import datetime
 
 main_bp = Blueprint('main', __name__)
 
@@ -45,32 +46,38 @@ def book_ride():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
-        pickup_lat = float(request.form.get('pickup_lat'))
-        pickup_lng = float(request.form.get('pickup_lng'))
-        dropoff_lat = float(request.form.get('dropoff_lat'))
-        dropoff_lng = float(request.form.get('dropoff_lng'))
-        distance = float(request.form.get('distance', 0))
-        route_data = request.form.get('route_data')
-        
-        # Calculate fare (example: $2 per km + base fare of $5)
-        fare = (distance * 2) + 5
-        
-        ride = Ride(
-            rider_id=current_user.id,
-            pickup_lat=pickup_lat,
-            pickup_lng=pickup_lng,
-            dropoff_lat=dropoff_lat,
-            dropoff_lng=dropoff_lng,
-            distance=distance,
-            fare=fare,
-            route_data=route_data
-        )
-        
-        db.session.add(ride)
-        db.session.commit()
-        
-        flash('Ride booked successfully!')
-        return redirect(url_for('main.rider_dashboard'))
+        try:
+            pickup_lat = float(request.form.get('pickup_lat'))
+            pickup_lng = float(request.form.get('pickup_lng'))
+            dropoff_lat = float(request.form.get('dropoff_lat'))
+            dropoff_lng = float(request.form.get('dropoff_lng'))
+            distance = float(request.form.get('distance', 0))
+            route_data = request.form.get('route_data')
+            pickup_time = datetime.strptime(request.form.get('pickup_time'), '%Y-%m-%dT%H:%M')
+            
+            # Calculate fare (example: $2 per km + base fare of $5)
+            fare = (distance * 2) + 5
+            
+            ride = Ride(
+                rider_id=current_user.id,
+                pickup_lat=pickup_lat,
+                pickup_lng=pickup_lng,
+                dropoff_lat=dropoff_lat,
+                dropoff_lng=dropoff_lng,
+                distance=distance,
+                fare=fare,
+                route_data=route_data,
+                pickup_time=pickup_time
+            )
+            
+            db.session.add(ride)
+            db.session.commit()
+            
+            flash('Ride booked successfully!')
+            return redirect(url_for('main.rider_dashboard'))
+        except (ValueError, TypeError) as e:
+            flash('Invalid input data. Please try again.')
+            return redirect(url_for('main.book_ride'))
         
     return render_template('book_ride.html')
 
@@ -103,17 +110,22 @@ def edit_ride(ride_id):
             flash('Cannot edit ride in current status')
             return redirect(url_for('main.rider_dashboard'))
             
-        ride.pickup_lat = float(request.form.get('pickup_lat'))
-        ride.pickup_lng = float(request.form.get('pickup_lng'))
-        ride.dropoff_lat = float(request.form.get('dropoff_lat'))
-        ride.dropoff_lng = float(request.form.get('dropoff_lng'))
-        ride.distance = float(request.form.get('distance', 0))
-        ride.route_data = request.form.get('route_data')
-        ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
-        
-        db.session.commit()
-        flash('Ride updated successfully')
-        return redirect(url_for('main.rider_dashboard'))
+        try:
+            ride.pickup_lat = float(request.form.get('pickup_lat'))
+            ride.pickup_lng = float(request.form.get('pickup_lng'))
+            ride.dropoff_lat = float(request.form.get('dropoff_lat'))
+            ride.dropoff_lng = float(request.form.get('dropoff_lng'))
+            ride.distance = float(request.form.get('distance', 0))
+            ride.route_data = request.form.get('route_data')
+            ride.pickup_time = datetime.strptime(request.form.get('pickup_time'), '%Y-%m-%dT%H:%M')
+            ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
+            
+            db.session.commit()
+            flash('Ride updated successfully')
+            return redirect(url_for('main.rider_dashboard'))
+        except (ValueError, TypeError) as e:
+            flash('Invalid input data. Please try again.')
+            return redirect(url_for('main.edit_ride', ride_id=ride_id))
         
     return render_template('edit_ride.html', ride=ride)
 

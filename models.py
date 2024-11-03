@@ -34,6 +34,7 @@ class Ride(db.Model):
     dropoff_lng = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, accepted, completed, cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    pickup_time = db.Column(db.DateTime)  # Scheduled pickup time
     distance = db.Column(db.Float)  # in kilometers
     fare = db.Column(db.Float)
     route_data = db.Column(db.JSON)  # Store route coordinates
