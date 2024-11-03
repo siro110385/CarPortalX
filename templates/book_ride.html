@@ -11,7 +11,12 @@
             <form method="POST" id="bookingForm">
                 <div class="mb-3 position-relative">
                     <label for="pickup" class="form-label">Pickup Location</label>
-                    <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                    <div class="input-group mb-2">
+                        <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                        <button type="button" class="btn btn-secondary" id="useMyLocation">
+                            <i class="fas fa-location-arrow"></i> Use My Location
+                        </button>
+                    </div>
                     <input type="hidden" name="pickup_lat" id="pickup_lat">
                     <input type="hidden" name="pickup_lng" id="pickup_lng">
                 </div>
@@ -40,7 +45,7 @@
         </div>
         
         <div class="col-md-8">
-            <div id="map" style="height: 500px;"></div>
+            <div id="map"></div>
         </div>
     </div>
 </div>
@@ -81,6 +86,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
+    map.initGeolocation();  // Initialize geolocation
+    
     const pickupInput = document.getElementById('pickup');
     const dropoffInput = document.getElementById('dropoff');
     let debounceTimeout;
@@ -110,6 +117,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setupAddressInput(pickupInput);
     setupAddressInput(dropoffInput);
+
+    // Add click handler for location button
+    document.getElementById('useMyLocation').addEventListener('click', function() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    map.reverseGeocode(latitude, longitude, 'pickup');
+                },
+                (error) => {
+                    map.showError('Could not detect your location.');
+                }
+            );
+        }
+    });
 
     // Form submission
     document.getElementById('bookingForm').addEventListener('submit', function(e) {
