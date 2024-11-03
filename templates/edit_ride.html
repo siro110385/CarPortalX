@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-4">Edit Ride</h2>
+    
+    <div class="alert alert-danger" id="booking-error" style="display: none;"></div>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <form method="POST" id="bookingForm">
+                <div class="mb-3 position-relative">
+                    <label for="pickup" class="form-label">Pickup Location</label>
+                    <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                    <input type="hidden" name="pickup_lat" id="pickup_lat" value="{{ ride.pickup_lat }}">
+                    <input type="hidden" name="pickup_lng" id="pickup_lng" value="{{ ride.pickup_lng }}">
+                </div>
+                
+                <div class="mb-3 position-relative">
+                    <label for="dropoff" class="form-label">Drop-off Location</label>
+                    <input type="text" class="form-control" id="dropoff" required autocomplete="off">
+                    <input type="hidden" name="dropoff_lat" id="dropoff_lat" value="{{ ride.dropoff_lat }}">
+                    <input type="hidden" name="dropoff_lng" id="dropoff_lng" value="{{ ride.dropoff_lng }}">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Distance</label>
+                    <p id="distance" class="form-control-static">{{ '%.2f'|format(ride.distance) }} km</p>
+                    <input type="hidden" name="distance" id="distance_value" value="{{ ride.distance }}">
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Estimated Fare</label>
+                    <p id="fare" class="form-control-static">${{ '%.2f'|format(ride.fare) }}</p>
+                </div>
+                
+                <input type="hidden" name="route_data" id="route_data" value="{{ ride.route_data|tojson }}">
+                <button type="submit" class="btn btn-primary">Update Ride</button>
+                <a href="{{ url_for('main.rider_dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+        
+        <div class="col-md-8">
+            <div id="map"></div>
+        </div>
+    </div>
+</div>
+
+<meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const map = new MapManager('map');
+    // Initialize with existing ride data
+    const routeData = JSON.parse(document.getElementById('route_data').value || '{}');
+    if (routeData) {
+        map.displayRoute(routeData);
+    }
+});
+</script>
+{% endblock %}
