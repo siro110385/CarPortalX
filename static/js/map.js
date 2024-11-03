@@ -14,8 +14,8 @@ class MapManager {
             const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}&size=5`, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`
+                    'Authorization': this.apiKey,
+                    'Accept': 'application/json'
                 }
             });
 
@@ -38,8 +38,8 @@ class MapManager {
             const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?point.lat=${lat}&point.lon=${lng}`, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`
+                    'Authorization': this.apiKey,
+                    'Accept': 'application/json'
                 }
             });
 
@@ -64,16 +64,18 @@ class MapManager {
 
     async calculateRouteWithStops(points) {
         try {
-            // Format coordinates for API
-            const coordinates = points.map(p => p.join(',')).join(';');
+            const payload = {
+                coordinates: points  // points are already in [longitude,latitude] format
+            };
             
-            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${this.apiKey}&coordinates=${coordinates}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
+            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
+                method: 'POST',
                 headers: {
-                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
-                }
+                    'Authorization': this.apiKey,
+                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+                    'Content-Type': 'application/json; charset=utf-8'
+                },
+                body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
