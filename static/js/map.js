@@ -98,9 +98,9 @@ class MapManager {
                 coordinates: points.map(point => [point[1], point[0]]) // Convert [lat,lng] to [lng,lat]
             };
             
-            console.log('Request payload:', payload); // For debugging
+            console.log('Request payload:', payload);
             
-            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
+            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
                 method: 'POST',
                 headers: {
                     'Authorization': this.apiKey,
@@ -110,23 +110,26 @@ class MapManager {
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('API Error Response:', errorData);
-                throw new Error(`Route calculation failed: ${JSON.stringify(errorData)}`);
-            }
-
             const data = await response.json();
-            console.log('API Success Response:', data);
+            console.log('API Response:', data);
+
+            if (!response.ok) {
+                // Check for specific error codes
+                if (data.error?.code === 2010) {
+                    throw new Error('One or more locations are not accessible by car. Please choose locations closer to roads.');
+                }
+                throw new Error(data.error?.message || 'Route calculation failed');
+            }
 
             if (!data.features || !data.features[0]) {
                 throw new Error('Invalid response format from API');
             }
 
-            // Extract total distance and duration
-            const summary = data.features[0].properties.summary;
-            const distanceInKm = summary.distance / 1000;
-            const durationInMin = summary.duration / 60;
+            // Extract total distance and duration from properties
+            const properties = data.features[0].properties;
+            const segments = properties.segments[0];
+            const distanceInKm = segments.distance / 1000;
+            const durationInMin = segments.duration / 60;
 
             return {
                 route: data.features[0].geometry,
@@ -135,7 +138,7 @@ class MapManager {
             };
         } catch (error) {
             console.error('Route calculation failed:', error);
-            this.showError('Unable to calculate route. Please try different locations.');
+            this.showError(error.message || 'Unable to calculate route. Please try different locations.');
             throw error;
         }
     }
@@ -191,7 +194,7 @@ class MapManager {
             }
         } catch (error) {
             console.error('Error updating route:', error);
-            this.showError('Unable to calculate route. Please try different locations.');
+            this.showError(error.message || 'Unable to calculate route. Please try different locations.');
             document.getElementById('bookButton').disabled = true;
         }
     }
@@ -235,9 +238,10 @@ class MapManager {
         if (errorDiv) {
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
+            errorDiv.scrollIntoView({ behavior: 'smooth' });
             setTimeout(() => {
                 errorDiv.style.display = 'none';
-            }, 5000);
+            }, 10000); // Show error for 10 seconds
         }
     }
 }
