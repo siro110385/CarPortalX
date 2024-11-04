@@ -17,13 +17,9 @@ def rider_dashboard():
     if current_user.user_type != 'rider':
         return redirect(url_for('main.index'))
     
-    # Get all user's rides
     rides = Ride.query.filter_by(rider_id=current_user.id).order_by(Ride.created_at.desc()).all()
-    
-    # Get all user's contracts
     contracts = Contract.query.filter_by(user_id=current_user.id).all()
     
-    # Calculate monthly usage for each contract (only completed rides)
     monthly_usage = {}
     current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     next_month = (current_month + timedelta(days=32)).replace(day=1)
@@ -31,7 +27,7 @@ def rider_dashboard():
     for contract in contracts:
         usage = db.session.query(func.sum(Ride.distance)).filter(
             Ride.contract_id == contract.id,
-            Ride.status == 'completed',  # Only count completed rides
+            Ride.status == 'completed',
             Ride.created_at >= current_month,
             Ride.created_at < next_month
         ).scalar() or 0
@@ -42,13 +38,93 @@ def rider_dashboard():
                          contracts=contracts,
                          monthly_usage=monthly_usage)
 
+@main_bp.route('/driver/dashboard')
+@login_required
+def driver_dashboard():
+    if current_user.user_type != 'driver':
+        return redirect(url_for('main.index'))
+    
+    my_rides = Ride.query.filter_by(driver_id=current_user.id).order_by(Ride.created_at.desc()).all()
+    pending_rides = Ride.query.filter_by(status='pending').order_by(Ride.created_at.desc()).all()
+    
+    return render_template('driver/dashboard.html', 
+                         my_rides=my_rides,
+                         pending_rides=pending_rides)
+
+@main_bp.route('/admin/dashboard')
+@login_required
+def admin_dashboard():
+    if current_user.user_type != 'admin':
+        return redirect(url_for('main.index'))
+    
+    users = User.query.all()
+    rides = Ride.query.order_by(Ride.created_at.desc()).all()
+    cars = Car.query.all()
+    contracts = Contract.query.all()
+    
+    return render_template('admin/dashboard.html',
+                         users=users,
+                         rides=rides,
+                         cars=cars,
+                         contracts=contracts)
+
+@main_bp.route('/admin/car/add', methods=['POST'])
+@login_required
+def add_car():
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    model = request.form.get('model')
+    license_plate = request.form.get('license_plate')
+    
+    car = Car(model=model, license_plate=license_plate)
+    db.session.add(car)
+    db.session.commit()
+    
+    flash('Car added successfully')
+    return redirect(url_for('main.admin_dashboard'))
+
+@main_bp.route('/admin/contract/add', methods=['POST'])
+@login_required
+def add_contract():
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        user_id = request.form.get('user_id')
+        car_id = request.form.get('car_id')
+        monthly_km_limit = float(request.form.get('monthly_km_limit'))
+        working_days = ','.join(request.form.getlist('working_days'))
+        daily_start_time = datetime.strptime(request.form.get('daily_start_time'), '%H:%M').time()
+        daily_end_time = datetime.strptime(request.form.get('daily_end_time'), '%H:%M').time()
+        end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+        
+        contract = Contract(
+            user_id=user_id,
+            car_id=car_id,
+            monthly_km_limit=monthly_km_limit,
+            working_days=working_days,
+            daily_start_time=daily_start_time,
+            daily_end_time=daily_end_time,
+            start_date=datetime.now(),
+            end_date=end_date
+        )
+        
+        db.session.add(contract)
+        db.session.commit()
+        
+        flash('Contract added successfully')
+    except Exception as e:
+        flash(f'Error adding contract: {str(e)}')
+    
+    return redirect(url_for('main.admin_dashboard'))
+
 @main_bp.route('/book-ride', methods=['GET', 'POST'])
 @login_required
 def book_ride():
     if current_user.user_type != 'rider':
         return redirect(url_for('main.index'))
     
-    # Get user's contracts
     contracts = Contract.query.filter_by(user_id=current_user.id).all()
     if not contracts:
         flash('No active contracts found. Please contact administrator.')
@@ -62,7 +138,6 @@ def book_ride():
             
             pickup_datetime = datetime.strptime(pickup_datetime_str, '%Y-%m-%dT%H:%M')
             
-            # Get selected contract
             contract_id = request.form.get('contract_id')
             if not contract_id:
                 raise ValueError("Please select a car")
@@ -71,7 +146,6 @@ def book_ride():
             if not contract or contract.user_id != current_user.id:
                 raise ValueError("Invalid contract selected")
             
-            # Create ride
             ride = Ride(
                 rider_id=current_user.id,
                 car_id=contract.car_id,
@@ -82,7 +156,7 @@ def book_ride():
                 dropoff_lat=float(request.form.get('dropoff_lat')),
                 dropoff_lng=float(request.form.get('dropoff_lng')),
                 distance=float(request.form.get('distance')),
-                fare=float(request.form.get('distance')) * 2 + 5,  # $2 per km + $5 base fare
+                fare=float(request.form.get('distance')) * 2 + 5,
                 route_data=request.form.get('route_data'),
                 status='pending'
             )
@@ -90,7 +164,6 @@ def book_ride():
             db.session.add(ride)
             db.session.flush()
             
-            # Add pickup stop
             pickup_stop = RideStop(
                 ride_id=ride.id,
                 sequence=0,
@@ -101,7 +174,6 @@ def book_ride():
             )
             db.session.add(pickup_stop)
             
-            # Add intermediate stops
             stop_lats = request.form.getlist('stop_lat[]')
             stop_lngs = request.form.getlist('stop_lng[]')
             stop_addresses = request.form.getlist('stop_address[]')
@@ -118,7 +190,6 @@ def book_ride():
                     )
                     db.session.add(stop)
             
-            # Add dropoff stop
             dropoff_stop = RideStop(
                 ride_id=ride.id,
                 sequence=len(stop_lats) + 1,
@@ -138,76 +209,10 @@ def book_ride():
             flash(f'Error booking ride: {str(e)}')
             return redirect(url_for('main.book_ride'))
     
-    # For GET request, check availability of all cars
-    pickup_datetime = request.args.get('pickup_datetime', datetime.now())
-    if isinstance(pickup_datetime, str):
-        pickup_datetime = datetime.strptime(pickup_datetime, '%Y-%m-%dT%H:%M')
-    
-    # Calculate estimated duration from route data
-    estimated_duration_hours = float(request.args.get('estimated_duration', 2))  # Default 2 hours
-    
-    available_cars = []
-    for contract in contracts:
-        # Check for overlapping bookings
-        existing_bookings = Ride.query.filter(
-            Ride.car_id == contract.car_id,
-            Ride.status.in_(['pending', 'accepted', 'in_progress']),
-            or_(
-                # New booking starts during existing booking
-                and_(
-                    Ride.pickup_datetime <= pickup_datetime,
-                    Ride.pickup_datetime + timedelta(hours=estimated_duration_hours) >= pickup_datetime
-                ),
-                # New booking ends during existing booking
-                and_(
-                    Ride.pickup_datetime <= pickup_datetime + timedelta(hours=estimated_duration_hours),
-                    Ride.pickup_datetime + timedelta(hours=estimated_duration_hours) >= pickup_datetime + timedelta(hours=estimated_duration_hours)
-                )
-            )
-        ).first()
-        
-        # Calculate monthly usage (only completed rides)
-        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        month_end = (month_start + timedelta(days=32)).replace(day=1)
-        monthly_usage = db.session.query(func.sum(Ride.distance)).filter(
-            Ride.contract_id == contract.id,
-            Ride.status == 'completed',  # Only count completed rides
-            Ride.created_at >= month_start,
-            Ride.created_at < month_end
-        ).scalar() or 0
-        
-        # Check timing
-        pickup_time = pickup_datetime.time()
-        working_days = [int(d) for d in contract.working_days.split(',')]
-        is_working_day = pickup_datetime.weekday() + 1 in working_days
-        is_working_hours = (contract.daily_start_time <= pickup_time <= contract.daily_end_time)
-        
-        car_status = {
-            'monthly_usage': monthly_usage,
-            'available': True,
-            'selectable': True,
-            'warning': None,
-            'overtime': False
-        }
-        
-        if existing_bookings:
-            car_status['selectable'] = False
-            car_status['warning'] = 'Already booked for this time'
-        elif monthly_usage >= contract.monthly_km_limit:
-            car_status['warning'] = f'Monthly limit exceeded ({monthly_usage:.1f}/{contract.monthly_km_limit} km)'
-        elif not is_working_day:
-            car_status['selectable'] = False
-            car_status['warning'] = 'Not available on this day'
-        elif not is_working_hours and pickup_time > contract.daily_end_time:
-            car_status['warning'] = 'Outside contract hours - Overtime charges apply'
-            car_status['overtime'] = True
-        
-        available_cars.append((contract, car_status))
-    
     return render_template('book_ride.html',
-                         now=datetime.now(),
+                         datetime=datetime,
                          contracts=contracts,
-                         available_cars=available_cars)
+                         available_cars=[])
 
 @main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
 @login_required
@@ -228,3 +233,55 @@ def cancel_ride(ride_id):
     db.session.commit()
     flash('Ride cancelled successfully.')
     return redirect(url_for('main.rider_dashboard'))
+
+@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
+@login_required
+def accept_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.status != 'pending':
+        return jsonify({'error': 'Ride is no longer available'}), 400
+    
+    ride.driver_id = current_user.id
+    ride.status = 'accepted'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride accepted successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
+@login_required
+def start_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'accepted':
+        return jsonify({'error': 'Cannot start ride that is not accepted'}), 400
+    
+    ride.status = 'in_progress'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride started successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
+@login_required
+def complete_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'in_progress':
+        return jsonify({'error': 'Cannot complete ride that is not in progress'}), 400
+    
+    ride.status = 'completed'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride completed successfully'})
