@@ -38,7 +38,13 @@ def admin_dashboard():
         return redirect(url_for('main.index'))
     users = User.query.all()
     rides = Ride.query.order_by(Ride.created_at.desc()).all()
-    return render_template('admin/dashboard.html', users=users, rides=rides)
+    cars = Car.query.all()
+    contracts = Contract.query.all()
+    return render_template('admin/dashboard.html', 
+                         users=users, 
+                         rides=rides,
+                         cars=cars,
+                         contracts=contracts)
 
 @main_bp.route('/book-ride', methods=['GET', 'POST'])
 @login_required
@@ -54,7 +60,11 @@ def book_ride():
     
     if request.method == 'POST':
         try:
-            pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
+            pickup_datetime_str = request.form.get('pickup_datetime')
+            if not pickup_datetime_str:
+                raise ValueError("Pickup datetime is required")
+                
+            pickup_datetime = datetime.strptime(pickup_datetime_str, '%Y-%m-%dT%H:%M')
             
             # Check if pickup time is within contract hours
             pickup_time = pickup_datetime.time()
@@ -77,7 +87,7 @@ def book_ride():
             ).scalar() or 0
             
             # Check if new ride would exceed monthly limit
-            new_distance = float(request.form.get('distance', 0))
+            new_distance = float(request.form.get('distance') or 0)
             if month_distance + new_distance > contract.monthly_km_limit:
                 flash('This ride would exceed your monthly kilometer limit')
                 return redirect(url_for('main.book_ride'))
@@ -99,7 +109,7 @@ def book_ride():
             )
             
             db.session.add(ride)
-            db.session.commit()
+            db.session.flush()  # Get ride.id without committing
             
             # Add pickup stop
             pickup_stop = RideStop(
@@ -214,3 +224,66 @@ def complete_ride(ride_id):
     db.session.commit()
     
     return jsonify({'message': 'Ride completed successfully'})
+
+@main_bp.route('/admin/car/add', methods=['POST'])
+@login_required
+def add_car():
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    model = request.form.get('model')
+    license_plate = request.form.get('license_plate')
+    
+    car = Car(model=model, license_plate=license_plate)
+    db.session.add(car)
+    db.session.commit()
+    
+    flash('Car added successfully')
+    return redirect(url_for('main.admin_dashboard'))
+
+@main_bp.route('/admin/car/<int:car_id>/toggle', methods=['POST'])
+@login_required
+def toggle_car(car_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    car = Car.query.get_or_404(car_id)
+    car.is_active = not car.is_active
+    db.session.commit()
+    
+    return jsonify({'message': 'Car status updated successfully'})
+
+@main_bp.route('/admin/contract/add', methods=['POST'])
+@login_required
+def add_contract():
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        user_id = request.form.get('user_id')
+        car_id = request.form.get('car_id')
+        monthly_km_limit = float(request.form.get('monthly_km_limit'))
+        working_days = ','.join(request.form.getlist('working_days'))
+        daily_start_time = datetime.strptime(request.form.get('daily_start_time'), '%H:%M').time()
+        daily_end_time = datetime.strptime(request.form.get('daily_end_time'), '%H:%M').time()
+        end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+        
+        contract = Contract(
+            user_id=user_id,
+            car_id=car_id,
+            monthly_km_limit=monthly_km_limit,
+            working_days=working_days,
+            daily_start_time=daily_start_time,
+            daily_end_time=daily_end_time,
+            start_date=datetime.now(),
+            end_date=end_date
+        )
+        
+        db.session.add(contract)
+        db.session.commit()
+        
+        flash('Contract added successfully')
+    except Exception as e:
+        flash(f'Error adding contract: {str(e)}')
+    
+    return redirect(url_for('main.admin_dashboard'))
