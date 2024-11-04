@@ -40,7 +40,7 @@ class MapManager {
 
     async searchAddress(query, inputElement) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}&size=5&boundary.country=US`, {
+            const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}&size=5`, {
                 method: 'GET',
                 headers: {
                     'Authorization': this.apiKey,
@@ -49,14 +49,15 @@ class MapManager {
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                console.error('API Error:', errorData);
-                throw new Error(`Geocoding failed: ${JSON.stringify(errorData)}`);
+                throw new Error(`Geocoding failed: ${response.statusText}`);
             }
 
             const data = await response.json();
-            this.showAutocompleteResults(data.features, inputElement);
-            return data.features;
+            if (data.features && data.features.length > 0) {
+                this.showAutocompleteResults(data.features, inputElement);
+                return data.features;
+            }
+            return [];
         } catch (error) {
             console.error('Address search failed:', error);
             this.showError('Address search failed. Please try again.');
@@ -64,5 +65,175 @@ class MapManager {
         }
     }
 
-    // ... rest of the MapManager class methods remain the same ...
+    showAutocompleteResults(features, inputElement) {
+        const dropdownId = `${inputElement.id}-dropdown`;
+        let dropdown = document.getElementById(dropdownId);
+        
+        if (!dropdown) {
+            dropdown = document.createElement('ul');
+            dropdown.id = dropdownId;
+            dropdown.className = 'address-dropdown';
+            inputElement.parentNode.appendChild(dropdown);
+        }
+        
+        dropdown.innerHTML = '';
+        features.forEach(feature => {
+            const li = document.createElement('li');
+            li.textContent = feature.properties.label;
+            li.addEventListener('click', () => {
+                inputElement.value = feature.properties.label;
+                const [lng, lat] = feature.geometry.coordinates;
+                this.updateLocationFields(inputElement.id, lat, lng);
+                dropdown.style.display = 'none';
+            });
+            dropdown.appendChild(li);
+        });
+        
+        dropdown.style.display = features.length > 0 ? 'block' : 'none';
+    }
+
+    async calculateRoute(points) {
+        try {
+            const payload = {
+                coordinates: points.map(point => [point[1], point[0]]) // Convert [lat,lng] to [lng,lat]
+            };
+            
+            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/json', {
+                method: 'POST',
+                headers: {
+                    'Authorization': this.apiKey,
+                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Route calculation failed: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('Route API Response:', data); // For debugging
+
+            if (!data.features || !data.features[0]) {
+                throw new Error('Invalid response format from API');
+            }
+
+            // Extract total distance and duration
+            const summary = data.features[0].properties.summary;
+            const distanceInKm = summary.distance / 1000;
+            const durationInMin = summary.duration / 60;
+
+            return {
+                route: data.features[0].geometry,
+                distance: distanceInKm,
+                duration: durationInMin
+            };
+        } catch (error) {
+            console.error('Route calculation failed:', error);
+            this.showError('Unable to calculate route. Please try different locations.');
+            throw error;
+        }
+    }
+
+    async updateRoute() {
+        try {
+            // Collect all points in order: pickup -> stops -> dropoff
+            const points = [];
+            
+            // Add pickup point
+            const pickupLat = parseFloat(document.getElementById('pickup_lat').value);
+            const pickupLng = parseFloat(document.getElementById('pickup_lng').value);
+            if (pickupLat && pickupLng) {
+                points.push([pickupLat, pickupLng]);
+            }
+            
+            // Add intermediate stops
+            const stopEntries = document.querySelectorAll('.stop-entry');
+            for (let entry of stopEntries) {
+                const lat = parseFloat(entry.querySelector('.stop-lat').value);
+                const lng = parseFloat(entry.querySelector('.stop-lng').value);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    points.push([lat, lng]);
+                }
+            }
+            
+            // Add dropoff point
+            const dropoffLat = parseFloat(document.getElementById('dropoff_lat').value);
+            const dropoffLng = parseFloat(document.getElementById('dropoff_lng').value);
+            if (dropoffLat && dropoffLng) {
+                points.push([dropoffLat, dropoffLng]);
+            }
+
+            if (points.length >= 2) { // Need at least pickup and dropoff
+                this.clearMarkers();
+                
+                // Add markers for all points
+                points.forEach((point, index) => {
+                    const label = index === 0 ? 'Pickup' : 
+                                index === points.length - 1 ? 'Drop-off' : 
+                                `Stop ${index}`;
+                    this.addMarker(point[0], point[1], label);
+                });
+
+                // Calculate and display route
+                const routeData = await this.calculateRoute(points);
+                this.displayRoute(routeData.route);
+                this.updateDistanceAndFare(routeData.distance);
+                
+                // Store route data for form submission
+                document.getElementById('route_data').value = JSON.stringify(routeData.route);
+                document.getElementById('bookButton').disabled = false;
+            }
+        } catch (error) {
+            console.error('Error updating route:', error);
+            this.showError('Unable to calculate route. Please try different locations.');
+            document.getElementById('bookButton').disabled = true;
+        }
+    }
+
+    updateLocationFields(inputId, lat, lng) {
+        const type = inputId.includes('pickup') ? 'pickup' : 'dropoff';
+        document.getElementById(`${type}_lat`).value = lat;
+        document.getElementById(`${type}_lng`).value = lng;
+        this.updateRoute();
+    }
+
+    displayRoute(routeGeometry) {
+        if (this.routeLayer) {
+            this.map.removeLayer(this.routeLayer);
+        }
+        this.routeLayer = L.geoJSON(routeGeometry).addTo(this.map);
+        this.map.fitBounds(this.routeLayer.getBounds());
+    }
+
+    updateDistanceAndFare(distance) {
+        document.getElementById('distance').textContent = `${distance.toFixed(2)} km`;
+        document.getElementById('distance_value').value = distance.toFixed(2);
+        
+        const fare = (distance * 2) + 5;  // $2 per km + $5 base fare
+        document.getElementById('fare').textContent = `$${fare.toFixed(2)}`;
+    }
+
+    addMarker(lat, lng, title) {
+        const marker = L.marker([lat, lng], {title}).addTo(this.map);
+        this.markers.push(marker);
+        return marker;
+    }
+
+    clearMarkers() {
+        this.markers.forEach(marker => this.map.removeLayer(marker));
+        this.markers = [];
+    }
+
+    showError(message) {
+        const errorDiv = document.getElementById('booking-error');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+    }
 }
