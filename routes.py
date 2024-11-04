@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, Ride
+from models import User, Ride, RideStop
 import requests
 from datetime import datetime
 
@@ -46,34 +46,77 @@ def book_ride():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
-        pickup_lat = float(request.form.get('pickup_lat'))
-        pickup_lng = float(request.form.get('pickup_lng'))
-        dropoff_lat = float(request.form.get('dropoff_lat'))
-        dropoff_lng = float(request.form.get('dropoff_lng'))
-        distance = float(request.form.get('distance', 0))
-        route_data = request.form.get('route_data')
-        pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
-        
-        # Calculate fare (example: $2 per km + base fare of $5)
-        fare = (distance * 2) + 5
-        
-        ride = Ride(
-            rider_id=current_user.id,
-            pickup_lat=pickup_lat,
-            pickup_lng=pickup_lng,
-            dropoff_lat=dropoff_lat,
-            dropoff_lng=dropoff_lng,
-            distance=distance,
-            fare=fare,
-            route_data=route_data,
-            pickup_datetime=pickup_datetime
-        )
-        
-        db.session.add(ride)
-        db.session.commit()
-        
-        flash('Ride booked successfully!')
-        return redirect(url_for('main.rider_dashboard'))
+        try:
+            pickup_lat = float(request.form.get('pickup_lat'))
+            pickup_lng = float(request.form.get('pickup_lng'))
+            dropoff_lat = float(request.form.get('dropoff_lat'))
+            dropoff_lng = float(request.form.get('dropoff_lng'))
+            distance = float(request.form.get('distance', 0))
+            route_data = request.form.get('route_data')
+            pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
+            
+            # Create the ride first
+            ride = Ride(
+                rider_id=current_user.id,
+                pickup_lat=pickup_lat,
+                pickup_lng=pickup_lng,
+                dropoff_lat=dropoff_lat,
+                dropoff_lng=dropoff_lng,
+                distance=distance,
+                fare=(distance * 2) + 5,  # $2 per km + $5 base fare
+                route_data=route_data,
+                pickup_datetime=pickup_datetime,
+                status='pending'
+            )
+            
+            db.session.add(ride)
+            db.session.commit()
+            
+            # Add pickup stop
+            pickup_stop = RideStop(
+                ride_id=ride.id,
+                sequence=0,
+                lat=pickup_lat,
+                lng=pickup_lng,
+                stop_type='pickup'
+            )
+            db.session.add(pickup_stop)
+            
+            # Add intermediate stops
+            stop_lats = request.form.getlist('stop_lat[]')
+            stop_lngs = request.form.getlist('stop_lng[]')
+            stop_addresses = request.form.getlist('stop_address[]')
+            
+            for i, (lat, lng, address) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
+                if lat and lng:  # Only add if coordinates are present
+                    stop = RideStop(
+                        ride_id=ride.id,
+                        sequence=i,
+                        lat=float(lat),
+                        lng=float(lng),
+                        address=address,
+                        stop_type='stop'
+                    )
+                    db.session.add(stop)
+            
+            # Add dropoff stop
+            dropoff_stop = RideStop(
+                ride_id=ride.id,
+                sequence=len(stop_lats) + 1,
+                lat=dropoff_lat,
+                lng=dropoff_lng,
+                stop_type='dropoff'
+            )
+            db.session.add(dropoff_stop)
+            
+            db.session.commit()
+            flash('Ride booked successfully!')
+            return redirect(url_for('main.rider_dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error booking ride: {str(e)}')
+            return redirect(url_for('main.book_ride'))
         
     return render_template('book_ride.html', now=datetime.now())
 
@@ -106,18 +149,64 @@ def edit_ride(ride_id):
             flash('Cannot edit ride in current status')
             return redirect(url_for('main.rider_dashboard'))
             
-        ride.pickup_lat = float(request.form.get('pickup_lat'))
-        ride.pickup_lng = float(request.form.get('pickup_lng'))
-        ride.dropoff_lat = float(request.form.get('dropoff_lat'))
-        ride.dropoff_lng = float(request.form.get('dropoff_lng'))
-        ride.distance = float(request.form.get('distance', 0))
-        ride.route_data = request.form.get('route_data')
-        ride.pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
-        ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
-        
-        db.session.commit()
-        flash('Ride updated successfully')
-        return redirect(url_for('main.rider_dashboard'))
+        try:
+            ride.pickup_lat = float(request.form.get('pickup_lat'))
+            ride.pickup_lng = float(request.form.get('pickup_lng'))
+            ride.dropoff_lat = float(request.form.get('dropoff_lat'))
+            ride.dropoff_lng = float(request.form.get('dropoff_lng'))
+            ride.distance = float(request.form.get('distance', 0))
+            ride.route_data = request.form.get('route_data')
+            ride.pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
+            ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
+            
+            # Update stops
+            RideStop.query.filter_by(ride_id=ride.id).delete()
+            
+            # Add pickup stop
+            pickup_stop = RideStop(
+                ride_id=ride.id,
+                sequence=0,
+                lat=ride.pickup_lat,
+                lng=ride.pickup_lng,
+                stop_type='pickup'
+            )
+            db.session.add(pickup_stop)
+            
+            # Add intermediate stops
+            stop_lats = request.form.getlist('stop_lat[]')
+            stop_lngs = request.form.getlist('stop_lng[]')
+            stop_addresses = request.form.getlist('stop_address[]')
+            
+            for i, (lat, lng, address) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
+                if lat and lng:
+                    stop = RideStop(
+                        ride_id=ride.id,
+                        sequence=i,
+                        lat=float(lat),
+                        lng=float(lng),
+                        address=address,
+                        stop_type='stop'
+                    )
+                    db.session.add(stop)
+            
+            # Add dropoff stop
+            dropoff_stop = RideStop(
+                ride_id=ride.id,
+                sequence=len(stop_lats) + 1,
+                lat=ride.dropoff_lat,
+                lng=ride.dropoff_lng,
+                stop_type='dropoff'
+            )
+            db.session.add(dropoff_stop)
+            
+            db.session.commit()
+            flash('Ride updated successfully')
+            return redirect(url_for('main.rider_dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating ride: {str(e)}')
+            return redirect(url_for('main.edit_ride', ride_id=ride.id))
         
     return render_template('edit_ride.html', ride=ride, now=datetime.now())
 
