@@ -21,7 +21,7 @@
                 <div class="mb-3 position-relative">
                     <label for="pickup" class="form-label">Pickup Location</label>
                     <div class="input-group mb-2">
-                        <input type="text" class="form-control" id="pickup" required autocomplete="off">
+                        <input type="text" class="form-control" id="pickup" name="pickup" required autocomplete="off">
                         <button type="button" class="btn btn-secondary" id="useMyLocation">
                             <i class="fas fa-location-arrow"></i> Use My Location
                         </button>
@@ -32,7 +32,8 @@
 
                 <div class="mb-3">
                     <label for="pickup_datetime" class="form-label">Pickup Date & Time</label>
-                    <input type="datetime-local" class="form-control" id="pickup_datetime" name="pickup_datetime" required>
+                    <input type="datetime-local" class="form-control" id="pickup_datetime" name="pickup_datetime" required
+                           min="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
                 </div>
 
                 <!-- Stops Container -->
@@ -46,7 +47,7 @@
                 
                 <div class="mb-3 position-relative">
                     <label for="dropoff" class="form-label">Drop-off Location</label>
-                    <input type="text" class="form-control" id="dropoff" required autocomplete="off">
+                    <input type="text" class="form-control" id="dropoff" name="dropoff" required autocomplete="off">
                     <input type="hidden" name="dropoff_lat" id="dropoff_lat">
                     <input type="hidden" name="dropoff_lng" id="dropoff_lng">
                 </div>
@@ -89,8 +90,6 @@
     </div>
 </template>
 
-<meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
-
 <style>
 .address-dropdown {
     position: absolute;
@@ -125,6 +124,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
+    map.initStops();  // Initialize stops functionality
     
     function setupAddressInput(input) {
         input.addEventListener('input', function() {
@@ -166,19 +166,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    document.getElementById('bookingForm').addEventListener('submit', function(e) {
+    document.getElementById('bookingForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
         const pickupLat = document.getElementById('pickup_lat').value;
         const dropoffLat = document.getElementById('dropoff_lat').value;
         const pickupDateTime = new Date(document.getElementById('pickup_datetime').value);
         
         if (!pickupLat || !dropoffLat) {
-            e.preventDefault();
             map.showError('Please select valid pickup and drop-off locations from the suggestions.');
             return;
         }
         
         if (pickupDateTime < new Date()) {
-            e.preventDefault();
             map.showError('Pickup time must be in the future.');
             return;
         }
@@ -187,10 +187,42 @@ document.addEventListener('DOMContentLoaded', function() {
         const stopInputs = document.querySelectorAll('.stop-input');
         for (let input of stopInputs) {
             if (!input.value.trim()) {
-                e.preventDefault();
                 map.showError('Please fill in all stop locations.');
                 return;
             }
+        }
+        
+        try {
+            const formData = new FormData(this);
+            const response = await fetch(this.action, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                
+                if (data.needsConfirmation) {
+                    if (confirm(data.message)) {
+                        // Add confirmation to form and resubmit
+                        formData.append('confirmed_overtime', 'true');
+                        formData.append('contract_id', data.contract_id);
+                        const confirmResponse = await fetch(this.action, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (confirmResponse.redirected) {
+                            window.location.href = confirmResponse.url;
+                        }
+                    }
+                }
+            } else if (response.redirected) {
+                window.location.href = response.url;
+            }
+        } catch (error) {
+            console.error('Error submitting form:', error);
+            map.showError('Failed to submit booking. Please try again.');
         }
     });
 });
