@@ -4,6 +4,15 @@
 <div class="container">
     <h2 class="mb-4">Book a Ride</h2>
     
+    {% if contract %}
+    <div class="alert alert-info">
+        <h5>Contract Information</h5>
+        <p>Car: {{ contract.car.model }} ({{ contract.car.license_plate }})</p>
+        <p>Available Hours: {{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}</p>
+        <p>Monthly Limit: {{ contract.monthly_km_limit }} km</p>
+    </div>
+    {% endif %}
+    
     <div class="alert alert-danger" id="booking-error" style="display: none;"></div>
     
     <div class="row">

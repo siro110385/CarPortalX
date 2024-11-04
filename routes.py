@@ -1,9 +1,10 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, Ride, RideStop
+from models import User, Ride, RideStop, Car, Contract
+from sqlalchemy import func
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 main_bp = Blueprint('main', __name__)
 
@@ -45,26 +46,54 @@ def book_ride():
     if current_user.user_type != 'rider':
         return redirect(url_for('main.index'))
     
+    # Get user's active contract
+    contract = Contract.query.filter_by(user_id=current_user.id).first()
+    if not contract:
+        flash('No active contract found. Please contact administrator.')
+        return redirect(url_for('main.rider_dashboard'))
+    
     if request.method == 'POST':
         try:
-            pickup_lat = float(request.form.get('pickup_lat'))
-            pickup_lng = float(request.form.get('pickup_lng'))
-            dropoff_lat = float(request.form.get('dropoff_lat'))
-            dropoff_lng = float(request.form.get('dropoff_lng'))
-            distance = float(request.form.get('distance', 0))
-            route_data = request.form.get('route_data')
             pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
             
-            # Create the ride first
+            # Check if pickup time is within contract hours
+            pickup_time = pickup_datetime.time()
+            if pickup_time < contract.daily_start_time or pickup_time > contract.daily_end_time:
+                flash('Pickup time must be within contracted hours')
+                return redirect(url_for('main.book_ride'))
+            
+            # Check if pickup day is a working day
+            working_days = [int(d) for d in contract.working_days.split(',')]
+            if pickup_datetime.weekday() + 1 not in working_days:
+                flash('Rides can only be booked on contracted working days')
+                return redirect(url_for('main.book_ride'))
+            
+            # Calculate this month's total distance
+            month_start = datetime(pickup_datetime.year, pickup_datetime.month, 1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1)
+            month_distance = db.session.query(func.sum(Ride.distance)).filter(
+                Ride.contract_id == contract.id,
+                Ride.created_at.between(month_start, month_end)
+            ).scalar() or 0
+            
+            # Check if new ride would exceed monthly limit
+            new_distance = float(request.form.get('distance', 0))
+            if month_distance + new_distance > contract.monthly_km_limit:
+                flash('This ride would exceed your monthly kilometer limit')
+                return redirect(url_for('main.book_ride'))
+            
+            # Create ride with contract and car
             ride = Ride(
                 rider_id=current_user.id,
-                pickup_lat=pickup_lat,
-                pickup_lng=pickup_lng,
-                dropoff_lat=dropoff_lat,
-                dropoff_lng=dropoff_lng,
-                distance=distance,
-                fare=(distance * 2) + 5,  # $2 per km + $5 base fare
-                route_data=route_data,
+                car_id=contract.car_id,
+                contract_id=contract.id,
+                pickup_lat=float(request.form.get('pickup_lat')),
+                pickup_lng=float(request.form.get('pickup_lng')),
+                dropoff_lat=float(request.form.get('dropoff_lat')),
+                dropoff_lng=float(request.form.get('dropoff_lng')),
+                distance=new_distance,
+                fare=(new_distance * 2) + 5,  # $2 per km + $5 base fare
+                route_data=request.form.get('route_data'),
                 pickup_datetime=pickup_datetime,
                 status='pending'
             )
@@ -76,8 +105,8 @@ def book_ride():
             pickup_stop = RideStop(
                 ride_id=ride.id,
                 sequence=0,
-                lat=pickup_lat,
-                lng=pickup_lng,
+                lat=float(request.form.get('pickup_lat')),
+                lng=float(request.form.get('pickup_lng')),
                 stop_type='pickup'
             )
             db.session.add(pickup_stop)
@@ -103,8 +132,8 @@ def book_ride():
             dropoff_stop = RideStop(
                 ride_id=ride.id,
                 sequence=len(stop_lats) + 1,
-                lat=dropoff_lat,
-                lng=dropoff_lng,
+                lat=float(request.form.get('dropoff_lat')),
+                lng=float(request.form.get('dropoff_lng')),
                 stop_type='dropoff'
             )
             db.session.add(dropoff_stop)
@@ -117,8 +146,8 @@ def book_ride():
             db.session.rollback()
             flash(f'Error booking ride: {str(e)}')
             return redirect(url_for('main.book_ride'))
-        
-    return render_template('book_ride.html', now=datetime.now())
+    
+    return render_template('book_ride.html', now=datetime.now(), contract=contract)
 
 @main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
 @login_required
@@ -135,80 +164,6 @@ def cancel_ride(ride_id):
     else:
         flash('Cannot cancel ride in current status')
     return redirect(url_for('main.rider_dashboard'))
-
-@main_bp.route('/ride/<int:ride_id>/edit', methods=['GET', 'POST'])
-@login_required
-def edit_ride(ride_id):
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.rider_id != current_user.id:
-        flash('Unauthorized action')
-        return redirect(url_for('main.rider_dashboard'))
-    
-    if request.method == 'POST':
-        if ride.status != 'pending':
-            flash('Cannot edit ride in current status')
-            return redirect(url_for('main.rider_dashboard'))
-            
-        try:
-            ride.pickup_lat = float(request.form.get('pickup_lat'))
-            ride.pickup_lng = float(request.form.get('pickup_lng'))
-            ride.dropoff_lat = float(request.form.get('dropoff_lat'))
-            ride.dropoff_lng = float(request.form.get('dropoff_lng'))
-            ride.distance = float(request.form.get('distance', 0))
-            ride.route_data = request.form.get('route_data')
-            ride.pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
-            ride.fare = (float(request.form.get('distance', 0)) * 2) + 5
-            
-            # Update stops
-            RideStop.query.filter_by(ride_id=ride.id).delete()
-            
-            # Add pickup stop
-            pickup_stop = RideStop(
-                ride_id=ride.id,
-                sequence=0,
-                lat=ride.pickup_lat,
-                lng=ride.pickup_lng,
-                stop_type='pickup'
-            )
-            db.session.add(pickup_stop)
-            
-            # Add intermediate stops
-            stop_lats = request.form.getlist('stop_lat[]')
-            stop_lngs = request.form.getlist('stop_lng[]')
-            stop_addresses = request.form.getlist('stop_address[]')
-            
-            for i, (lat, lng, address) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
-                if lat and lng:
-                    stop = RideStop(
-                        ride_id=ride.id,
-                        sequence=i,
-                        lat=float(lat),
-                        lng=float(lng),
-                        address=address,
-                        stop_type='stop'
-                    )
-                    db.session.add(stop)
-            
-            # Add dropoff stop
-            dropoff_stop = RideStop(
-                ride_id=ride.id,
-                sequence=len(stop_lats) + 1,
-                lat=ride.dropoff_lat,
-                lng=ride.dropoff_lng,
-                stop_type='dropoff'
-            )
-            db.session.add(dropoff_stop)
-            
-            db.session.commit()
-            flash('Ride updated successfully')
-            return redirect(url_for('main.rider_dashboard'))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Error updating ride: {str(e)}')
-            return redirect(url_for('main.edit_ride', ride_id=ride.id))
-        
-    return render_template('edit_ride.html', ride=ride, now=datetime.now())
 
 @main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
 @login_required
