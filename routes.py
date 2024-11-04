@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from extensions import db
 from models import User, Ride, RideStop, Car, Contract
-from sqlalchemy import func
+from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
 
 main_bp = Blueprint('main', __name__)
@@ -23,7 +23,7 @@ def rider_dashboard():
     # Get all user's contracts
     contracts = Contract.query.filter_by(user_id=current_user.id).all()
     
-    # Calculate monthly usage for each contract
+    # Calculate monthly usage for each contract (only completed rides)
     monthly_usage = {}
     current_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     next_month = (current_month + timedelta(days=32)).replace(day=1)
@@ -31,6 +31,7 @@ def rider_dashboard():
     for contract in contracts:
         usage = db.session.query(func.sum(Ride.distance)).filter(
             Ride.contract_id == contract.id,
+            Ride.status == 'completed',  # Only count completed rides
             Ride.created_at >= current_month,
             Ride.created_at < next_month
         ).scalar() or 0
@@ -142,21 +143,35 @@ def book_ride():
     if isinstance(pickup_datetime, str):
         pickup_datetime = datetime.strptime(pickup_datetime, '%Y-%m-%dT%H:%M')
     
+    # Calculate estimated duration from route data
+    estimated_duration_hours = float(request.args.get('estimated_duration', 2))  # Default 2 hours
+    
     available_cars = []
     for contract in contracts:
-        # Check if car is already booked
+        # Check for overlapping bookings
         existing_bookings = Ride.query.filter(
             Ride.car_id == contract.car_id,
             Ride.status.in_(['pending', 'accepted', 'in_progress']),
-            Ride.pickup_datetime <= pickup_datetime + timedelta(hours=2),
-            Ride.pickup_datetime >= pickup_datetime - timedelta(hours=2)
+            or_(
+                # New booking starts during existing booking
+                and_(
+                    Ride.pickup_datetime <= pickup_datetime,
+                    Ride.pickup_datetime + timedelta(hours=estimated_duration_hours) >= pickup_datetime
+                ),
+                # New booking ends during existing booking
+                and_(
+                    Ride.pickup_datetime <= pickup_datetime + timedelta(hours=estimated_duration_hours),
+                    Ride.pickup_datetime + timedelta(hours=estimated_duration_hours) >= pickup_datetime + timedelta(hours=estimated_duration_hours)
+                )
+            )
         ).first()
         
-        # Calculate monthly usage
+        # Calculate monthly usage (only completed rides)
         month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         month_end = (month_start + timedelta(days=32)).replace(day=1)
         monthly_usage = db.session.query(func.sum(Ride.distance)).filter(
             Ride.contract_id == contract.id,
+            Ride.status == 'completed',  # Only count completed rides
             Ride.created_at >= month_start,
             Ride.created_at < month_end
         ).scalar() or 0
@@ -169,10 +184,10 @@ def book_ride():
         
         car_status = {
             'monthly_usage': monthly_usage,
-            'available': True,  # Default to available
-            'selectable': True,  # Whether the car can be selected
-            'warning': None,    # Warning message if any
-            'overtime': False   # Whether overtime charges apply
+            'available': True,
+            'selectable': True,
+            'warning': None,
+            'overtime': False
         }
         
         if existing_bookings:
@@ -180,12 +195,11 @@ def book_ride():
             car_status['warning'] = 'Already booked for this time'
         elif monthly_usage >= contract.monthly_km_limit:
             car_status['warning'] = f'Monthly limit exceeded ({monthly_usage:.1f}/{contract.monthly_km_limit} km)'
-            car_status['overtime'] = True
         elif not is_working_day:
-            car_status['warning'] = 'Outside contract days'
-            car_status['overtime'] = True
-        elif not is_working_hours:
-            car_status['warning'] = 'Outside contract hours'
+            car_status['selectable'] = False
+            car_status['warning'] = 'Not available on this day'
+        elif not is_working_hours and pickup_time > contract.daily_end_time:
+            car_status['warning'] = 'Outside contract hours - Overtime charges apply'
             car_status['overtime'] = True
         
         available_cars.append((contract, car_status))
@@ -214,23 +228,3 @@ def cancel_ride(ride_id):
     db.session.commit()
     flash('Ride cancelled successfully.')
     return redirect(url_for('main.rider_dashboard'))
-
-@main_bp.route('/ride/<int:ride_id>/edit', methods=['GET'])
-@login_required
-def edit_ride(ride_id):
-    if current_user.user_type != 'rider':
-        return redirect(url_for('main.index'))
-        
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.rider_id != current_user.id:
-        flash('Unauthorized action.')
-        return redirect(url_for('main.rider_dashboard'))
-        
-    if ride.status != 'pending':
-        flash('Cannot edit ride that is not pending.')
-        return redirect(url_for('main.rider_dashboard'))
-        
-    return render_template('edit_ride.html', 
-                         ride=ride,
-                         now=datetime.now(),
-                         contracts=Contract.query.filter_by(user_id=current_user.id).all())
