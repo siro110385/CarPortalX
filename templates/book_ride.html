@@ -24,7 +24,7 @@
                 <div class="mb-3">
                     <label for="pickup_datetime" class="form-label">Pickup Date & Time</label>
                     <input type="datetime-local" class="form-control" id="pickup_datetime" name="pickup_datetime" required
-                           min="{{ now.strftime('%Y-%m-%dT%H:%M') }}">
+                           min="{{ datetime.now().strftime('%Y-%m-%dT%H:%M') }}">
                 </div>
 
                 <!-- Stops Container -->
@@ -103,103 +103,46 @@
         </div>
     </div>
 </div>
+
+<meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
+
+<style>
+.address-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 4px;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+.address-dropdown li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.address-dropdown li:hover {
+    background: var(--bs-primary-bg-subtle);
+}
+</style>
 {% endblock %}
 
 {% block scripts %}
+<!-- Make sure Leaflet is loaded before map.js -->
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
     map.initStops();
-    
-    function setupAddressInput(input) {
-        input.addEventListener('input', function() {
-            clearTimeout(debounceTimeout);
-            debounceTimeout = setTimeout(() => {
-                const query = this.value.trim();
-                if (query.length >= 3) {
-                    map.searchAddress(query, this);
-                }
-            }, 300);
-        });
-
-        document.addEventListener('click', function(e) {
-            if (!input.contains(e.target)) {
-                const dropdownId = `${input.id}-dropdown`;
-                const dropdown = document.getElementById(dropdownId);
-                if (dropdown) {
-                    dropdown.style.display = 'none';
-                }
-            }
-        });
-    }
-
-    let debounceTimeout;
-    setupAddressInput(document.getElementById('pickup'));
-    setupAddressInput(document.getElementById('dropoff'));
-
-    document.getElementById('useMyLocation').addEventListener('click', function() {
-        if ('geolocation' in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const { latitude, longitude } = position.coords;
-                    map.reverseGeocode(latitude, longitude, 'pickup');
-                },
-                (error) => {
-                    map.showError('Could not detect your location.');
-                }
-            );
-        }
-    });
-
-    document.getElementById('bookingForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const pickupLat = document.getElementById('pickup_lat').value;
-        const dropoffLat = document.getElementById('dropoff_lat').value;
-        const pickupDateTime = new Date(document.getElementById('pickup_datetime').value);
-        
-        if (!pickupLat || !dropoffLat) {
-            map.showError('Please select valid pickup and drop-off locations from the suggestions.');
-            return;
-        }
-        
-        if (pickupDateTime < new Date()) {
-            map.showError('Pickup time must be in the future.');
-            return;
-        }
-
-        // Validate all stops have addresses
-        const stopInputs = document.querySelectorAll('.stop-input');
-        for (let input of stopInputs) {
-            if (!input.value.trim()) {
-                map.showError('Please fill in all stop locations.');
-                return;
-            }
-        }
-
-        // Validate car selection
-        const selectedCar = document.querySelector('input[name="contract_id"]:checked');
-        if (!selectedCar) {
-            map.showError('Please select a car for your ride.');
-            return;
-        }
-        
-        try {
-            const formData = new FormData(this);
-            const response = await fetch(this.action, {
-                method: 'POST',
-                body: formData
-            });
-            
-            if (response.redirected) {
-                window.location.href = response.url;
-            }
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            map.showError('Failed to submit booking. Please try again.');
-        }
-    });
 });
 </script>
 {% endblock %}
