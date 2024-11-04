@@ -7,6 +7,43 @@ class MapManager {
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
         this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';
+        this.debounceTimeout = null;
+    }
+
+    initStops() {
+        const addStopBtn = document.getElementById('addStop');
+        const stopsContainer = document.getElementById('stops-list');
+        const template = document.getElementById('stop-template');
+
+        if (addStopBtn && stopsContainer && template) {
+            addStopBtn.addEventListener('click', () => {
+                const stopEntry = template.content.cloneNode(true);
+                stopsContainer.appendChild(stopEntry);
+                
+                const input = stopsContainer.lastElementChild.querySelector('.stop-input');
+                this.setupAddressInput(input);
+                
+                const removeBtn = stopsContainer.lastElementChild.querySelector('.remove-stop');
+                removeBtn.addEventListener('click', (e) => {
+                    e.target.closest('.stop-entry').remove();
+                    this.updateRoute();
+                });
+            });
+        }
+    }
+
+    setupAddressInput(input) {
+        if (!input) return;
+        
+        input.addEventListener('input', () => {
+            clearTimeout(this.debounceTimeout);
+            this.debounceTimeout = setTimeout(() => {
+                const query = input.value.trim();
+                if (query.length >= 3) {
+                    this.searchAddress(query, input);
+                }
+            }, 300);
+        });
     }
 
     async reverseGeocode(lat, lng, type) {
@@ -79,8 +116,19 @@ class MapManager {
             li.addEventListener('click', () => {
                 inputElement.value = feature.properties.label;
                 const [lng, lat] = feature.geometry.coordinates;
-                this.updateLocationFields(inputElement.id, lat, lng);
+                
+                // Handle different input types (pickup, dropoff, or stop)
+                if (inputElement.classList.contains('stop-input')) {
+                    const stopEntry = inputElement.closest('.stop-entry');
+                    stopEntry.querySelector('.stop-lat').value = lat;
+                    stopEntry.querySelector('.stop-lng').value = lng;
+                    stopEntry.querySelector('.stop-address').value = feature.properties.label;
+                } else {
+                    this.updateLocationFields(inputElement.id, lat, lng);
+                }
+                
                 dropdown.style.display = 'none';
+                this.updateRoute();
             });
             dropdown.appendChild(li);
         });
@@ -90,7 +138,6 @@ class MapManager {
 
     async calculateRoute(points) {
         try {
-            // Format points for GraphHopper
             const pointsParam = points.map(point => `point=${point[0]},${point[1]}`).join('&');
             
             const response = await fetch(`https://graphhopper.com/api/1/route?${pointsParam}&vehicle=car&key=${this.apiKey}&type=json&points_encoded=false`);
@@ -108,9 +155,8 @@ class MapManager {
 
             const path = data.paths[0];
             const distanceInKm = path.distance / 1000;
-            const durationInMin = path.time / 60000; // Convert ms to minutes
+            const durationInMin = path.time / 60000;
 
-            // Convert GraphHopper points to GeoJSON
             const coordinates = path.points.coordinates;
             const routeGeometry = {
                 type: 'LineString',
@@ -135,7 +181,6 @@ class MapManager {
 
     async updateRoute() {
         try {
-            // Collect all points in order: pickup -> stops -> dropoff
             const points = [];
             
             // Add pickup point
@@ -162,7 +207,7 @@ class MapManager {
                 points.push([dropoffLat, dropoffLng]);
             }
 
-            if (points.length >= 2) { // Need at least pickup and dropoff
+            if (points.length >= 2) {
                 this.clearMarkers();
                 
                 // Add markers for all points
@@ -173,12 +218,10 @@ class MapManager {
                     this.addMarker(point[0], point[1], label);
                 });
 
-                // Calculate and display route
                 const routeData = await this.calculateRoute(points);
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
                 
-                // Store route data for form submission
                 document.getElementById('route_data').value = JSON.stringify(routeData.route);
                 document.getElementById('bookButton').disabled = false;
             }
@@ -231,7 +274,7 @@ class MapManager {
             errorDiv.scrollIntoView({ behavior: 'smooth' });
             setTimeout(() => {
                 errorDiv.style.display = 'none';
-            }, 10000); // Show error for 10 seconds
+            }, 10000);
         }
     }
 }
