@@ -46,16 +46,7 @@ class Contract(db.Model):
     # Add relationships
     user = db.relationship('User', backref='contracts')
     car = db.relationship('Car', backref='contracts')
-
-class RideStop(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    ride_id = db.Column(db.Integer, db.ForeignKey('ride.id'), nullable=False)
-    sequence = db.Column(db.Integer, nullable=False)  # Order of stops
-    lat = db.Column(db.Float, nullable=False)
-    lng = db.Column(db.Float, nullable=False)
-    address = db.Column(db.String(256))
-    stop_type = db.Column(db.String(20))  # 'pickup', 'stop', 'dropoff'
-
+    
 class Ride(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rider_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -68,13 +59,23 @@ class Ride(db.Model):
     dropoff_lng = db.Column(db.Float, nullable=False)
     status = db.Column(db.String(20), default='pending')  # pending, accepted, completed, cancelled
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    pickup_datetime = db.Column(db.DateTime, nullable=False)
     distance = db.Column(db.Float)  # in kilometers
     fare = db.Column(db.Float)
     route_data = db.Column(db.JSON)  # Store route coordinates
-    pickup_datetime = db.Column(db.DateTime, nullable=False)
-
+    
+    # Add relationships
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
     driver = db.relationship('User', foreign_keys=[driver_id], backref='rides_as_driver')
     car = db.relationship('Car', backref='rides')
     contract = db.relationship('Contract', backref='rides')
     stops = db.relationship('RideStop', backref='ride', order_by='RideStop.sequence')
+
+class RideStop(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ride_id = db.Column(db.Integer, db.ForeignKey('ride.id'), nullable=False)
+    sequence = db.Column(db.Integer, nullable=False)  # Order of stops
+    lat = db.Column(db.Float, nullable=False)
+    lng = db.Column(db.Float, nullable=False)
+    address = db.Column(db.String(256))
+    stop_type = db.Column(db.String(20))  # 'pickup', 'stop', 'dropoff'

@@ -47,7 +47,7 @@ def book_ride():
     if current_user.user_type != 'rider':
         return redirect(url_for('main.index'))
     
-    # Get user's active contracts
+    # Get user's contracts
     contracts = Contract.query.filter_by(user_id=current_user.id).all()
     if not contracts:
         flash('No active contracts found. Please contact administrator.')
@@ -61,56 +61,20 @@ def book_ride():
             
             pickup_datetime = datetime.strptime(pickup_datetime_str, '%Y-%m-%dT%H:%M')
             
-            # Find available cars from user's contracts
-            available_cars = []
-            overtime_contracts = []
+            # Get selected contract
+            contract_id = request.form.get('contract_id')
+            if not contract_id:
+                raise ValueError("Please select a car")
             
-            for contract in contracts:
-                # Check if car is already booked
-                existing_bookings = Ride.query.filter(
-                    Ride.car_id == contract.car_id,
-                    Ride.status.in_(['pending', 'accepted', 'in_progress']),
-                    Ride.pickup_datetime <= pickup_datetime + timedelta(hours=2),  # Buffer time
-                    Ride.pickup_datetime >= pickup_datetime - timedelta(hours=2)
-                ).first()
-                
-                if existing_bookings:
-                    continue  # Car is already booked
-                
-                # Check if pickup time is within contract hours
-                pickup_time = pickup_datetime.time()
-                working_days = [int(d) for d in contract.working_days.split(',')]
-                is_working_day = pickup_datetime.weekday() + 1 in working_days
-                is_working_hours = (contract.daily_start_time <= pickup_time <= contract.daily_end_time)
-                
-                if is_working_day and is_working_hours:
-                    available_cars.append((contract, False))  # (contract, is_overtime)
-                elif is_working_day:  # Outside working hours but on working day
-                    overtime_contracts.append((contract, True))
-            
-            # Combine regular and overtime options
-            available_options = available_cars + overtime_contracts
-            
-            if not available_options:
-                flash('No cars available at the selected time.')
-                return redirect(url_for('main.book_ride'))
-            
-            # Use the first available contract (prefer non-overtime)
-            selected_contract, is_overtime = available_options[0]
-            
-            # Check for overtime confirmation if needed
-            if is_overtime and not request.form.get('confirmed_overtime'):
-                return jsonify({
-                    'needsConfirmation': True,
-                    'message': 'This booking is outside contract hours. Overtime charges will apply. Do you want to continue?',
-                    'contract_id': selected_contract.id
-                })
+            contract = Contract.query.get(contract_id)
+            if not contract or contract.user_id != current_user.id:
+                raise ValueError("Invalid contract selected")
             
             # Create ride
             ride = Ride(
                 rider_id=current_user.id,
-                car_id=selected_contract.car_id,
-                contract_id=selected_contract.id,
+                car_id=contract.car_id,
+                contract_id=contract.id,
                 pickup_datetime=pickup_datetime,
                 pickup_lat=float(request.form.get('pickup_lat')),
                 pickup_lng=float(request.form.get('pickup_lng')),
@@ -173,9 +137,63 @@ def book_ride():
             flash(f'Error booking ride: {str(e)}')
             return redirect(url_for('main.book_ride'))
     
-    return render_template('book_ride.html', 
-                         now=datetime.now(), 
-                         contracts=contracts)
+    # For GET request, check availability of all cars
+    pickup_datetime = request.args.get('pickup_datetime', datetime.now())
+    if isinstance(pickup_datetime, str):
+        pickup_datetime = datetime.strptime(pickup_datetime, '%Y-%m-%dT%H:%M')
+    
+    available_cars = []
+    for contract in contracts:
+        # Check if car is already booked
+        existing_bookings = Ride.query.filter(
+            Ride.car_id == contract.car_id,
+            Ride.status.in_(['pending', 'accepted', 'in_progress']),
+            Ride.pickup_datetime <= pickup_datetime + timedelta(hours=2),
+            Ride.pickup_datetime >= pickup_datetime - timedelta(hours=2)
+        ).first()
+        
+        # Calculate monthly usage
+        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_end = (month_start + timedelta(days=32)).replace(day=1)
+        monthly_usage = db.session.query(func.sum(Ride.distance)).filter(
+            Ride.contract_id == contract.id,
+            Ride.created_at >= month_start,
+            Ride.created_at < month_end
+        ).scalar() or 0
+        
+        # Check timing
+        pickup_time = pickup_datetime.time()
+        working_days = [int(d) for d in contract.working_days.split(',')]
+        is_working_day = pickup_datetime.weekday() + 1 in working_days
+        is_working_hours = (contract.daily_start_time <= pickup_time <= contract.daily_end_time)
+        
+        car_status = {
+            'monthly_usage': monthly_usage,
+            'available': True,  # Default to available
+            'selectable': True,  # Whether the car can be selected
+            'warning': None,    # Warning message if any
+            'overtime': False   # Whether overtime charges apply
+        }
+        
+        if existing_bookings:
+            car_status['selectable'] = False
+            car_status['warning'] = 'Already booked for this time'
+        elif monthly_usage >= contract.monthly_km_limit:
+            car_status['warning'] = f'Monthly limit exceeded ({monthly_usage:.1f}/{contract.monthly_km_limit} km)'
+            car_status['overtime'] = True
+        elif not is_working_day:
+            car_status['warning'] = 'Outside contract days'
+            car_status['overtime'] = True
+        elif not is_working_hours:
+            car_status['warning'] = 'Outside contract hours'
+            car_status['overtime'] = True
+        
+        available_cars.append((contract, car_status))
+    
+    return render_template('book_ride.html',
+                         now=datetime.now(),
+                         contracts=contracts,
+                         available_cars=available_cars)
 
 @main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
 @login_required
