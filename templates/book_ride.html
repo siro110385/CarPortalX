@@ -4,15 +4,6 @@
 <div class="container">
     <h2 class="mb-4">Book a Ride</h2>
     
-    {% if contract %}
-    <div class="alert alert-info">
-        <h5>Contract Information</h5>
-        <p>Car: {{ contract.car.model }} ({{ contract.car.license_plate }})</p>
-        <p>Available Hours: {{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}</p>
-        <p>Monthly Limit: {{ contract.monthly_km_limit }} km</p>
-    </div>
-    {% endif %}
-    
     <div class="alert alert-danger" id="booking-error" style="display: none;"></div>
     
     <div class="row">
@@ -61,6 +52,54 @@
                 <div class="mb-3">
                     <label class="form-label">Estimated Fare</label>
                     <p id="fare" class="form-control-static">$0.00</p>
+                </div>
+
+                <!-- Available Cars Section -->
+                <div class="mb-3">
+                    <label class="form-label">Available Cars</label>
+                    <div class="row">
+                        {% for contract, car_status in available_cars %}
+                        <div class="col-md-12 mb-3">
+                            <div class="card {% if not car_status.available %}bg-light{% endif %}">
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ contract.car.model }}</h5>
+                                    <p class="card-text">
+                                        License: {{ contract.car.license_plate }}<br>
+                                        Contract Hours: {{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}<br>
+                                        Monthly Limit: {{ contract.monthly_km_limit }} km<br>
+                                        Used: {{ car_status.monthly_usage|round(2) }} km
+                                    </p>
+                                    {% if car_status.available %}
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="contract_id" 
+                                                   value="{{ contract.id }}" id="contract_{{ contract.id }}"
+                                                   required>
+                                            <label class="form-check-label" for="contract_{{ contract.id }}">
+                                                Select Car
+                                            </label>
+                                        </div>
+                                        {% if car_status.overtime %}
+                                        <small class="text-warning">
+                                            <i class="fas fa-exclamation-triangle"></i> Outside contract hours - Overtime charges apply
+                                        </small>
+                                        {% endif %}
+                                    {% else %}
+                                        <p class="text-danger mb-0">
+                                            <i class="fas fa-times-circle"></i> 
+                                            {% if car_status.reason == 'booked' %}
+                                                Already booked
+                                            {% elif car_status.reason == 'time' %}
+                                                Outside contract hours
+                                            {% elif car_status.reason == 'limit' %}
+                                                Monthly limit exceeded
+                                            {% endif %}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
                 
                 <input type="hidden" name="route_data" id="route_data">
@@ -190,6 +229,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 map.showError('Please fill in all stop locations.');
                 return;
             }
+        }
+
+        // Validate car selection
+        const selectedCar = document.querySelector('input[name="contract_id"]:checked');
+        if (!selectedCar) {
+            map.showError('Please select a car for your ride.');
+            return;
         }
         
         try {
