@@ -57,5 +57,61 @@
             </tbody>
         </table>
     </div>
+
+    <h3 class="mt-4">Your Contracts</h3>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Car</th>
+                    <th>Monthly KM Limit</th>
+                    <th>Working Hours</th>
+                    <th>Working Days</th>
+                    <th>Valid Until</th>
+                    <th>Used KM This Month</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contract in contracts %}
+                <tr>
+                    <td>{{ contract.car.model }} ({{ contract.car.license_plate }})</td>
+                    <td>{{ contract.monthly_km_limit }} km</td>
+                    <td>{{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}</td>
+                    <td>{{ contract.working_days }}</td>
+                    <td>{{ contract.end_date.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ monthly_usage.get(contract.id, 0)|round(2) }} km</td>
+                    <td>
+                        <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#contractDetails{{ contract.id }}">
+                            View Details
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
+<!-- Contract Details Modal -->
+{% for contract in contracts %}
+<div class="modal fade" id="contractDetails{{ contract.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Contract Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Car:</strong> {{ contract.car.model }} ({{ contract.car.license_plate }})</p>
+                <p><strong>Monthly Limit:</strong> {{ contract.monthly_km_limit }} km</p>
+                <p><strong>Working Hours:</strong> {{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}</p>
+                <p><strong>Working Days:</strong> {{ contract.working_days }}</p>
+                <p><strong>Valid Until:</strong> {{ contract.end_date.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Used This Month:</strong> {{ monthly_usage.get(contract.id, 0)|round(2) }} km</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}
