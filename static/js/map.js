@@ -35,6 +35,42 @@ class MapManager {
         }
     }
 
+    showAutocompleteResults(features, inputElement) {
+        const dropdownId = `${inputElement.id}-dropdown`;
+        let dropdown = document.getElementById(dropdownId);
+        
+        if (!dropdown) {
+            dropdown = document.createElement('ul');
+            dropdown.id = dropdownId;
+            dropdown.className = 'address-dropdown';
+            inputElement.parentNode.appendChild(dropdown);
+            this.autocompleteDropdowns[inputElement.id] = dropdown;
+        }
+
+        dropdown.innerHTML = '';
+        features.forEach(feature => {
+            const li = document.createElement('li');
+            li.textContent = feature.properties.label;
+            li.addEventListener('click', () => {
+                inputElement.value = feature.properties.label;
+                const coords = feature.geometry.coordinates;
+                if (inputElement.classList.contains('stop-input')) {
+                    const stopEntry = inputElement.closest('.stop-entry');
+                    stopEntry.querySelector('.stop-lat').value = coords[1];
+                    stopEntry.querySelector('.stop-lng').value = coords[0];
+                    stopEntry.querySelector('.stop-address').value = feature.properties.label;
+                } else {
+                    this.updateLocationFields(inputElement.id, coords[1], coords[0]);
+                }
+                dropdown.style.display = 'none';
+                this.updateRoute();
+            });
+            dropdown.appendChild(li);
+        });
+        
+        dropdown.style.display = features.length ? 'block' : 'none';
+    }
+
     async calculateRouteWithStops(points) {
         try {
             console.log('Calculating route with points:', points);
@@ -149,5 +185,104 @@ class MapManager {
         }
     }
 
-    // ... rest of the MapManager class remains the same ...
+    updateLocationFields(inputId, lat, lng) {
+        const type = inputId.includes('pickup') ? 'pickup' : 'dropoff';
+        document.getElementById(`${type}_lat`).value = lat;
+        document.getElementById(`${type}_lng`).value = lng;
+        this.updateRoute();
+    }
+
+    displayRoute(routeGeometry) {
+        if (this.routeLayer) {
+            this.map.removeLayer(this.routeLayer);
+        }
+        this.routeLayer = L.geoJSON(routeGeometry).addTo(this.map);
+        this.map.fitBounds(this.routeLayer.getBounds());
+    }
+
+    updateDistanceAndFare(distance) {
+        document.getElementById('distance').textContent = `${distance.toFixed(2)} km`;
+        document.getElementById('distance_value').value = distance.toFixed(2);
+        
+        const fare = (distance * 2) + 5;  // $2 per km + $5 base fare
+        document.getElementById('fare').textContent = `$${fare.toFixed(2)}`;
+    }
+
+    addMarker(lat, lng, title) {
+        const marker = L.marker([lat, lng], {title}).addTo(this.map);
+        this.markers.push(marker);
+        return marker;
+    }
+
+    clearMarkers() {
+        this.markers.forEach(marker => this.map.removeLayer(marker));
+        this.markers = [];
+    }
+
+    showError(message) {
+        const errorDiv = document.getElementById('booking-error');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+    initGeolocation() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    this.map.setView([latitude, longitude], 15);
+                    if (this.currentLocationMarker) {
+                        this.map.removeLayer(this.currentLocationMarker);
+                    }
+                    this.currentLocationMarker = L.marker([latitude, longitude], {
+                        title: 'Your Location'
+                    }).addTo(this.map);
+                },
+                (error) => {
+                    console.error('Geolocation error:', error);
+                    this.showError('Could not detect your location.');
+                }
+            );
+        }
+    }
+
+    initStops() {
+        const addStopBtn = document.getElementById('addStop');
+        const stopsContainer = document.getElementById('stops-list');
+        const template = document.getElementById('stop-template');
+
+        if (addStopBtn && stopsContainer && template) {
+            addStopBtn.addEventListener('click', () => {
+                const stopEntry = template.content.cloneNode(true);
+                stopsContainer.appendChild(stopEntry);
+                
+                const input = stopsContainer.lastElementChild.querySelector('.stop-input');
+                this.setupAddressInput(input);
+                
+                const removeBtn = stopsContainer.lastElementChild.querySelector('.remove-stop');
+                removeBtn.addEventListener('click', (e) => {
+                    e.target.closest('.stop-entry').remove();
+                    this.updateRoute();
+                });
+            });
+        }
+    }
+
+    setupAddressInput(input) {
+        let debounceTimeout;
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                const query = input.value.trim();
+                if (query.length >= 3) {
+                    this.searchAddress(query, input);
+                }
+            }, 300);
+        });
+    }
 }

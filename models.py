@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
@@ -24,6 +24,29 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+class Car(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model = db.Column(db.String(100), nullable=False)
+    license_plate = db.Column(db.String(20), unique=True, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Contract(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    car_id = db.Column(db.Integer, db.ForeignKey('car.id'), nullable=False)
+    monthly_km_limit = db.Column(db.Float, nullable=False)  # Monthly kilometer budget
+    start_date = db.Column(db.DateTime, nullable=False)
+    end_date = db.Column(db.DateTime, nullable=False)
+    daily_start_time = db.Column(db.Time, nullable=False)  # Available from time
+    daily_end_time = db.Column(db.Time, nullable=False)    # Available until time
+    working_days = db.Column(db.String(50), nullable=False)  # e.g., "1,2,3,4,5" for Mon-Fri
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Add relationships
+    user = db.relationship('User', backref='contracts')
+    car = db.relationship('Car', backref='contracts')
+
 class RideStop(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     ride_id = db.Column(db.Integer, db.ForeignKey('ride.id'), nullable=False)
@@ -37,6 +60,8 @@ class Ride(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     rider_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     driver_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    car_id = db.Column(db.Integer, db.ForeignKey('car.id'))
+    contract_id = db.Column(db.Integer, db.ForeignKey('contract.id'))
     pickup_lat = db.Column(db.Float, nullable=False)
     pickup_lng = db.Column(db.Float, nullable=False)
     dropoff_lat = db.Column(db.Float, nullable=False)
@@ -50,4 +75,6 @@ class Ride(db.Model):
 
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
     driver = db.relationship('User', foreign_keys=[driver_id], backref='rides_as_driver')
+    car = db.relationship('Car', backref='rides')
+    contract = db.relationship('Contract', backref='rides')
     stops = db.relationship('RideStop', backref='ride', order_by='RideStop.sequence')
