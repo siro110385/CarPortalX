@@ -98,22 +98,26 @@ class MapManager {
                 coordinates: points.map(point => [point[1], point[0]]) // Convert [lat,lng] to [lng,lat]
             };
             
-            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/json', {
+            console.log('Request payload:', payload); // For debugging
+            
+            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
                 method: 'POST',
                 headers: {
                     'Authorization': this.apiKey,
                     'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json; charset=utf-8'
                 },
                 body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
-                throw new Error(`Route calculation failed: ${response.statusText}`);
+                const errorData = await response.json();
+                console.error('API Error Response:', errorData);
+                throw new Error(`Route calculation failed: ${JSON.stringify(errorData)}`);
             }
 
             const data = await response.json();
-            console.log('Route API Response:', data); // For debugging
+            console.log('API Success Response:', data);
 
             if (!data.features || !data.features[0]) {
                 throw new Error('Invalid response format from API');
