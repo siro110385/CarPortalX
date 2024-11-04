@@ -4,6 +4,15 @@ from models import User, Car, Contract
 from datetime import datetime, time, timedelta
 
 def create_sample_data():
+    # Create admin user
+    admin = User(
+        email='admin@example.com',
+        username='admin',
+        user_type='admin'
+    )
+    admin.set_password('admin123')
+    db.session.add(admin)
+    
     # Create cars
     car1 = Car(model='Toyota Camry', license_plate='ABC123')
     car2 = Car(model='Honda Civic', license_plate='XYZ789')
