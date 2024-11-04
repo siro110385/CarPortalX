@@ -31,11 +31,16 @@
                     <td>{{ ride.status }}</td>
                     <td>{{ ride.driver.username if ride.driver else 'Not assigned' }}</td>
                     <td>
-                        <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
-                        {% for stop in ride.stops[1:-1] %}
-                            <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
-                        {% endfor %}
-                        <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                        {% if ride.stops %}
+                            <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
+                            {% for stop in ride.stops[1:-1] %}
+                                <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
+                            {% endfor %}
+                            <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                        {% else %}
+                            <strong>Pickup:</strong> ({{ ride.pickup_lat }}, {{ ride.pickup_lng }})<br>
+                            <strong>Drop-off:</strong> ({{ ride.dropoff_lat }}, {{ ride.dropoff_lng }})
+                        {% endif %}
                     </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>

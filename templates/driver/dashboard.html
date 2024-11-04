@@ -41,11 +41,18 @@
                     <td>{{ ride.status }}</td>
                     <td>{{ ride.rider.username }}</td>
                     <td>
-                        <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
-                        {% for stop in ride.stops[1:-1] %}
-                            <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
-                        {% endfor %}
-                        <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                        {% if ride.stops and ride.stops|length > 0 %}
+                            <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
+                            {% for stop in ride.stops[1:-1] %}
+                                <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
+                            {% endfor %}
+                            {% if ride.stops|length > 1 %}
+                                <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                            {% endif %}
+                        {% else %}
+                            <strong>Pickup:</strong> ({{ ride.pickup_lat }}, {{ ride.pickup_lng }})<br>
+                            <strong>Drop-off:</strong> ({{ ride.dropoff_lat }}, {{ ride.dropoff_lng }})
+                        {% endif %}
                     </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>
@@ -83,11 +90,18 @@
                     <td>{{ ride.pickup_datetime.strftime('%Y-%m-%d %H:%M') }}</td>
                     <td>{{ ride.rider.username }}</td>
                     <td>
-                        <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
-                        {% for stop in ride.stops[1:-1] %}
-                            <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
-                        {% endfor %}
-                        <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                        {% if ride.stops and ride.stops|length > 0 %}
+                            <strong>Pickup:</strong> {{ ride.stops[0].address }}<br>
+                            {% for stop in ride.stops[1:-1] %}
+                                <strong>Stop {{ loop.index }}:</strong> {{ stop.address }}<br>
+                            {% endfor %}
+                            {% if ride.stops|length > 1 %}
+                                <strong>Drop-off:</strong> {{ ride.stops[-1].address }}
+                            {% endif %}
+                        {% else %}
+                            <strong>Pickup:</strong> ({{ ride.pickup_lat }}, {{ ride.pickup_lng }})<br>
+                            <strong>Drop-off:</strong> ({{ ride.dropoff_lat }}, {{ ride.dropoff_lng }})
+                        {% endif %}
                     </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>
