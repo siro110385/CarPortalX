@@ -11,6 +11,12 @@
         <li class="nav-item">
             <a class="nav-link" id="rides-tab" data-bs-toggle="tab" href="#rides" role="tab">Rides</a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link" id="cars-tab" data-bs-toggle="tab" href="#cars" role="tab">Cars</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="contracts-tab" data-bs-toggle="tab" href="#contracts" role="tab">Contracts</a>
+        </li>
     </ul>
     
     <div class="tab-content" id="adminTabsContent">
@@ -73,6 +79,194 @@
                 </table>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="cars" role="tabpanel">
+            <div class="mb-3">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCarModal">Add New Car</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>License Plate</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for car in cars %}
+                        <tr>
+                            <td>{{ car.model }}</td>
+                            <td>{{ car.license_plate }}</td>
+                            <td>{{ 'Active' if car.is_active else 'Inactive' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-car" data-car-id="{{ car.id }}"
+                                        data-bs-toggle="modal" data-bs-target="#editCarModal">Edit</button>
+                                <button class="btn btn-sm btn-warning toggle-car" data-car-id="{{ car.id }}">
+                                    {{ 'Deactivate' if car.is_active else 'Activate' }}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="contracts" role="tabpanel">
+            <div class="mb-3">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addContractModal">Add New Contract</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Car</th>
+                            <th>Monthly KM Limit</th>
+                            <th>Working Hours</th>
+                            <th>Valid Until</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contract in contracts %}
+                        <tr>
+                            <td>{{ contract.user.username }}</td>
+                            <td>{{ contract.car.model }} ({{ contract.car.license_plate }})</td>
+                            <td>{{ contract.monthly_km_limit }} km</td>
+                            <td>{{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}</td>
+                            <td>{{ contract.end_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary edit-contract" data-contract-id="{{ contract.id }}"
+                                        data-bs-toggle="modal" data-bs-target="#editContractModal">Edit</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
+
+<!-- Add Car Modal -->
+<div class="modal fade" id="addCarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Car</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCarForm" method="POST" action="{{ url_for('main.add_car') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Model</label>
+                        <input type="text" class="form-control" name="model" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">License Plate</label>
+                        <input type="text" class="form-control" name="license_plate" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Car</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Contract Modal -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Contract</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addContractForm" method="POST" action="{{ url_for('main.add_contract') }}">
+                    <div class="mb-3">
+                        <label class="form-label">User</label>
+                        <select class="form-select" name="user_id" required>
+                            {% for user in users if user.user_type == 'rider' %}
+                            <option value="{{ user.id }}">{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Car</label>
+                        <select class="form-select" name="car_id" required>
+                            {% for car in cars if car.is_active %}
+                            <option value="{{ car.id }}">{{ car.model }} ({{ car.license_plate }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Monthly KM Limit</label>
+                        <input type="number" class="form-control" name="monthly_km_limit" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Working Days</label>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="working_days" value="1"> Monday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="2"> Tuesday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="3"> Wednesday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="4"> Thursday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="5"> Friday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="6"> Saturday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="7"> Sunday
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Daily Hours</label>
+                        <div class="row">
+                            <div class="col">
+                                <input type="time" class="form-control" name="daily_start_time" required>
+                            </div>
+                            <div class="col">
+                                <input type="time" class="form-control" name="daily_end_time" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" name="end_date" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Contract</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle car status
+    document.querySelectorAll('.toggle-car').forEach(button => {
+        button.addEventListener('click', async function() {
+            const carId = this.dataset.carId;
+            try {
+                const response = await fetch(`/admin/car/${carId}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to update car status');
+                }
+            } catch (error) {
+                console.error('Error toggling car status:', error);
+                alert('Failed to update car status');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
 {% endblock %}
