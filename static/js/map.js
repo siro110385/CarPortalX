@@ -6,26 +6,20 @@ class MapManager {
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
-        this.apiKey = document.querySelector('meta[name="ors-api-key"]').content;
+        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';
     }
 
     async reverseGeocode(lat, lng, type) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/reverse?point.lat=${lat}&point.lon=${lng}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': this.apiKey,
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await fetch(`https://graphhopper.com/api/1/geocode?reverse=true&point=${lat},${lng}&key=${this.apiKey}`);
 
             if (!response.ok) {
                 throw new Error(`Reverse geocoding failed: ${response.statusText}`);
             }
 
             const data = await response.json();
-            if (data.features && data.features.length > 0) {
-                const address = data.features[0].properties.label;
+            if (data.hits && data.hits.length > 0) {
+                const address = data.hits[0].name + (data.hits[0].country ? `, ${data.hits[0].country}` : '');
                 document.getElementById(type).value = address;
                 this.updateLocationFields(type, lat, lng);
                 return address;
@@ -40,22 +34,24 @@ class MapManager {
 
     async searchAddress(query, inputElement) {
         try {
-            const response = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(query)}&size=5`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': this.apiKey,
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await fetch(`https://graphhopper.com/api/1/geocode?q=${encodeURIComponent(query)}&limit=5&key=${this.apiKey}`);
 
             if (!response.ok) {
                 throw new Error(`Geocoding failed: ${response.statusText}`);
             }
 
             const data = await response.json();
-            if (data.features && data.features.length > 0) {
-                this.showAutocompleteResults(data.features, inputElement);
-                return data.features;
+            if (data.hits && data.hits.length > 0) {
+                const features = data.hits.map(hit => ({
+                    properties: {
+                        label: hit.name + (hit.country ? `, ${hit.country}` : '')
+                    },
+                    geometry: {
+                        coordinates: [hit.point.lng, hit.point.lat]
+                    }
+                }));
+                this.showAutocompleteResults(features, inputElement);
+                return features;
             }
             return [];
         } catch (error) {
@@ -94,45 +90,39 @@ class MapManager {
 
     async calculateRoute(points) {
         try {
-            const payload = {
-                coordinates: points.map(point => [point[1], point[0]]) // Convert [lat,lng] to [lng,lat]
-            };
+            // Format points for GraphHopper
+            const pointsParam = points.map(point => `point=${point[0]},${point[1]}`).join('&');
             
-            console.log('Request payload:', payload);
-            
-            const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-                method: 'POST',
-                headers: {
-                    'Authorization': this.apiKey,
-                    'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
-                    'Content-Type': 'application/json; charset=utf-8'
-                },
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(`https://graphhopper.com/api/1/route?${pointsParam}&vehicle=car&key=${this.apiKey}&type=json&points_encoded=false`);
+
+            if (!response.ok) {
+                throw new Error(`Route calculation failed: ${response.statusText}`);
+            }
 
             const data = await response.json();
             console.log('API Response:', data);
 
-            if (!response.ok) {
-                // Check for specific error codes
-                if (data.error?.code === 2010) {
-                    throw new Error('One or more locations are not accessible by car. Please choose locations closer to roads.');
-                }
-                throw new Error(data.error?.message || 'Route calculation failed');
+            if (!data.paths || !data.paths[0]) {
+                throw new Error('No route found');
             }
 
-            if (!data.features || !data.features[0]) {
-                throw new Error('Invalid response format from API');
-            }
+            const path = data.paths[0];
+            const distanceInKm = path.distance / 1000;
+            const durationInMin = path.time / 60000; // Convert ms to minutes
 
-            // Extract total distance and duration from properties
-            const properties = data.features[0].properties;
-            const segments = properties.segments[0];
-            const distanceInKm = segments.distance / 1000;
-            const durationInMin = segments.duration / 60;
+            // Convert GraphHopper points to GeoJSON
+            const coordinates = path.points.coordinates;
+            const routeGeometry = {
+                type: 'LineString',
+                coordinates: coordinates
+            };
 
             return {
-                route: data.features[0].geometry,
+                route: {
+                    type: 'Feature',
+                    geometry: routeGeometry,
+                    properties: {}
+                },
                 distance: distanceInKm,
                 duration: durationInMin
             };
