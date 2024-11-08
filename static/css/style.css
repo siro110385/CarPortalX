@@ -16,3 +16,16 @@
     margin-bottom: 0;
     min-height: 1.5rem;
 }
+
+.modal-lg {
+    max-width: 800px;
+}
+
+.modal-body h6 {
+    color: var(--bs-primary);
+    margin-bottom: 1rem;
+}
+
+.modal-body .table {
+    margin-bottom: 0;
+}
