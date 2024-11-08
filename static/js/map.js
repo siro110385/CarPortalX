@@ -208,7 +208,7 @@ class MapManager {
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
                 
-                // Check car availability after route update
+                // Check car availability after route update using the new helper function
                 const pickupDatetime = document.getElementById('pickup_datetime').value;
                 if (pickupDatetime) {
                     const response = await fetch('/book-ride?' + new URLSearchParams({
@@ -221,10 +221,13 @@ class MapManager {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
                     
-                    const availableCarsSection = doc.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                    // Use the new helper function
+                    const availableCarsSection = findAvailableCarsSection(doc);
                     if (availableCarsSection) {
-                        const currentSection = document.querySelector('.mb-3:has(label:contains("Available Cars"))');
-                        currentSection.innerHTML = availableCarsSection.innerHTML;
+                        const currentSection = findAvailableCarsSection(document);
+                        if (currentSection) {
+                            currentSection.innerHTML = availableCarsSection.innerHTML;
+                        }
                     }
                 }
                 
@@ -279,6 +282,18 @@ class MapManager {
     }
 }
 
+// Helper function to find the available cars section
+function findAvailableCarsSection(element) {
+    const sections = element.querySelectorAll('.mb-3');
+    for (const section of sections) {
+        const label = section.querySelector('label');
+        if (label && label.textContent.trim() === 'Available Cars') {
+            return section;
+        }
+    }
+    return null;
+}
+
 // Add event listener for pickup datetime changes after DOMContentLoaded
 document.addEventListener('DOMContentLoaded', function() {
     const pickupDatetime = document.getElementById('pickup_datetime');
@@ -295,11 +310,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 
-                // Update available cars section
-                const availableCarsSection = doc.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                // Use the new helper function
+                const availableCarsSection = findAvailableCarsSection(doc);
                 if (availableCarsSection) {
-                    const currentSection = document.querySelector('.mb-3:has(label:contains("Available Cars"))');
-                    currentSection.innerHTML = availableCarsSection.innerHTML;
+                    const currentSection = findAvailableCarsSection(document);
+                    if (currentSection) {
+                        currentSection.innerHTML = availableCarsSection.innerHTML;
+                    }
                 }
             } catch (error) {
                 console.error('Error checking availability:', error);
