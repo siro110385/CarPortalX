@@ -365,6 +365,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "requests" },
+    { name = "werkzeug" },
 ]
 
 [package.metadata]
@@ -378,6 +379,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "requests", specifier = ">=2.32.3" },
+    { name = "werkzeug" },
 ]
 
 [[package]]
