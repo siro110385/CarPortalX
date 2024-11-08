@@ -6,7 +6,7 @@ class MapManager {
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
-        this.apiKey = document.querySelector('meta[name="graphhopper-api-key"]').content;
+        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';  // GraphHopper API key
     }
 
     initStops() {
@@ -55,7 +55,7 @@ class MapManager {
             }
 
             const data = await response.json();
-            console.log('Geocoding response:', data);
+            console.log('Geocoding response:', data); // For debugging
 
             if (data.hits && data.hits.length > 0) {
                 this.showAutocompleteResults(data.hits, inputElement);
@@ -207,24 +207,6 @@ class MapManager {
                 const routeData = await this.calculateRoute(points);
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
-                
-                // Update car availability based on new route and datetime
-                const pickupDateTime = document.getElementById('pickup_datetime').value;
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('pickup_datetime', pickupDateTime);
-                currentUrl.searchParams.set('estimated_duration', routeData.duration / 60);
-                
-                const response = await fetch(currentUrl.toString());
-                const html = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                
-                // Update the cars section
-                const existingCars = document.querySelector('.available-cars');
-                const newCars = doc.querySelector('.available-cars');
-                if (existingCars && newCars) {
-                    existingCars.innerHTML = newCars.innerHTML;
-                }
                 
                 document.getElementById('estimated_duration').value = routeData.duration / 60;
                 document.getElementById('route_data').value = JSON.stringify(routeData.route);
