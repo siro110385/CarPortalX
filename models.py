@@ -46,6 +46,16 @@ class Contract(db.Model):
     # Add relationships
     user = db.relationship('User', backref='contracts')
     car = db.relationship('Car', backref='contracts')
+
+class Passenger(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ride_id = db.Column(db.Integer, db.ForeignKey('ride.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    ride = db.relationship('Ride', backref='passengers')
     
 class Ride(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -63,6 +73,8 @@ class Ride(db.Model):
     distance = db.Column(db.Float)  # in kilometers
     fare = db.Column(db.Float)
     route_data = db.Column(db.JSON)  # Store route coordinates
+    pickup_address = db.Column(db.String(256))  # Added for email notifications
+    dropoff_address = db.Column(db.String(256))  # Added for email notifications
     
     # Add relationships
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
