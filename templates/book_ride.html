@@ -55,7 +55,7 @@
                 </div>
 
                 <!-- Available Cars Section -->
-                <div class="mb-3 available-cars">
+                <div class="mb-3">
                     <label class="form-label">Available Cars</label>
                     <div class="row">
                         {% for contract, car_status in available_cars %}
@@ -150,14 +150,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     map.setupAddressInput(pickupInput);
     map.setupAddressInput(dropoffInput);
-
-    // Add datetime change listener
-    document.getElementById('pickup_datetime').addEventListener('input', function() {
-        const dateStr = this.value;
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('pickup_datetime', dateStr);
-        window.location.href = currentUrl.toString();
-    });
 
     // Handle click outside to close dropdowns
     document.addEventListener('click', (e) => {
