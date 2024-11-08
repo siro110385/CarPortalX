@@ -144,13 +144,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
     map.initStops();
     
+    // Add input event listeners
+    const pickupInput = document.getElementById('pickup');
+    const dropoffInput = document.getElementById('dropoff');
+
+    map.setupAddressInput(pickupInput);
+    map.setupAddressInput(dropoffInput);
+
+    // Handle click outside to close dropdowns
     document.addEventListener('click', (e) => {
         const dropdowns = document.querySelectorAll('.address-dropdown');
         dropdowns.forEach(dropdown => {
-            if (!dropdown.contains(e.target) && !e.target.classList.contains('stop-input')) {
+            if (!dropdown.contains(e.target) && 
+                !e.target.classList.contains('stop-input') &&
+                !e.target.id === 'pickup' &&
+                !e.target.id === 'dropoff') {
                 dropdown.style.display = 'none';
             }
         });
+    });
+
+    // Handle "Use My Location" button
+    document.getElementById('useMyLocation').addEventListener('click', function() {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    map.reverseGeocode(latitude, longitude, 'pickup');
+                },
+                (error) => {
+                    map.showError('Could not detect your location.');
+                }
+            );
+        }
     });
 });
 </script>

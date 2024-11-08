@@ -6,8 +6,7 @@ class MapManager {
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
-        // Update API key retrieval
-        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';
+        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';  // GraphHopper API key
     }
 
     initStops() {
@@ -45,15 +44,23 @@ class MapManager {
 
     async searchAddress(query, inputElement) {
         try {
-            const response = await fetch(`https://graphhopper.com/api/1/geocode?q=${encodeURIComponent(query)}&limit=5&key=${this.apiKey}`);
+            if (!query || query.length < 3) return;
+
+            const response = await fetch(
+                `https://graphhopper.com/api/1/geocode?q=${encodeURIComponent(query)}&limit=5&key=${this.apiKey}`
+            );
 
             if (!response.ok) {
                 throw new Error(`Geocoding failed: ${response.statusText}`);
             }
 
             const data = await response.json();
+            console.log('Geocoding response:', data); // For debugging
+
             if (data.hits && data.hits.length > 0) {
                 this.showAutocompleteResults(data.hits, inputElement);
+            } else {
+                console.log('No results found for query:', query);
             }
         } catch (error) {
             console.error('Address search failed:', error);
@@ -75,9 +82,17 @@ class MapManager {
         dropdown.innerHTML = '';
         hits.forEach(hit => {
             const li = document.createElement('li');
-            li.textContent = hit.name + (hit.country ? `, ${hit.country}` : '');
+            const address = [
+                hit.name,
+                hit.street,
+                hit.city,
+                hit.state,
+                hit.country
+            ].filter(Boolean).join(', ');
+            
+            li.textContent = address;
             li.addEventListener('click', () => {
-                inputElement.value = li.textContent;
+                inputElement.value = address;
                 
                 // Handle both main inputs and stop inputs
                 if (inputElement.classList.contains('stop-input')) {
@@ -88,6 +103,9 @@ class MapManager {
                     document.getElementById(`${inputElement.id}_lat`).value = hit.point.lat;
                     document.getElementById(`${inputElement.id}_lng`).value = hit.point.lng;
                 }
+                
+                // Add marker to map
+                this.addMarker(hit.point.lat, hit.point.lng, address);
                 
                 dropdown.style.display = 'none';
                 this.updateRoute();
