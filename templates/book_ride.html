@@ -104,7 +104,7 @@
     </div>
 </div>
 
-<meta name="ors-api-key" content="{{ config['OPENROUTE_API_KEY'] }}">
+<meta name="graphhopper-api-key" content="{{ config['GRAPHHOPPER_API_KEY'] }}">
 
 <style>
 .address-dropdown {
@@ -143,6 +143,15 @@
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
     map.initStops();
+    
+    document.addEventListener('click', (e) => {
+        const dropdowns = document.querySelectorAll('.address-dropdown');
+        dropdowns.forEach(dropdown => {
+            if (!dropdown.contains(e.target) && !e.target.classList.contains('stop-input')) {
+                dropdown.style.display = 'none';
+            }
+        });
+    });
 });
 </script>
 {% endblock %}

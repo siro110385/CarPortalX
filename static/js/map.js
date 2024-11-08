@@ -6,7 +6,8 @@ class MapManager {
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
-        this.apiKey = document.querySelector('meta[name="ors-api-key"]').content;
+        // Update API key retrieval
+        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';
     }
 
     initStops() {
@@ -14,22 +15,20 @@ class MapManager {
         const stopsContainer = document.getElementById('stops-list');
         
         if (addStopBtn && stopsContainer) {
-            const stopTemplate = `
-                <div class="stop-entry mb-3 position-relative">
+            addStopBtn.addEventListener('click', () => {
+                const stopEntry = document.createElement('div');
+                stopEntry.className = 'stop-entry mb-3 position-relative';
+                stopEntry.innerHTML = `
                     <div class="input-group">
                         <input type="text" class="form-control stop-input" name="stop_address[]" required autocomplete="off">
                         <button type="button" class="btn btn-danger remove-stop">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
-                    <input type="hidden" name="stop_lat[]" class="stop-lat">
-                    <input type="hidden" name="stop_lng[]" class="stop-lng">
-                </div>`;
-            
-            addStopBtn.addEventListener('click', () => {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = stopTemplate;
-                const stopEntry = tempDiv.firstElementChild;
+                    <input type="hidden" class="stop-lat" name="stop_lat[]">
+                    <input type="hidden" class="stop-lng" name="stop_lng[]">
+                `;
+                
                 stopsContainer.appendChild(stopEntry);
                 
                 const input = stopEntry.querySelector('.stop-input');
@@ -63,7 +62,7 @@ class MapManager {
     }
 
     showAutocompleteResults(hits, inputElement) {
-        const dropdownId = `${inputElement.id}-dropdown`;
+        const dropdownId = `${inputElement.id || 'stop'}-dropdown`;
         let dropdown = document.getElementById(dropdownId);
         
         if (!dropdown) {
@@ -79,12 +78,17 @@ class MapManager {
             li.textContent = hit.name + (hit.country ? `, ${hit.country}` : '');
             li.addEventListener('click', () => {
                 inputElement.value = li.textContent;
-                const fieldPrefix = inputElement.classList.contains('stop-input') ? 
-                    inputElement.closest('.stop-entry').querySelector('.stop') :
-                    inputElement.id;
                 
-                document.getElementById(`${fieldPrefix}_lat`).value = hit.point.lat;
-                document.getElementById(`${fieldPrefix}_lng`).value = hit.point.lng;
+                // Handle both main inputs and stop inputs
+                if (inputElement.classList.contains('stop-input')) {
+                    const stopEntry = inputElement.closest('.stop-entry');
+                    stopEntry.querySelector('.stop-lat').value = hit.point.lat;
+                    stopEntry.querySelector('.stop-lng').value = hit.point.lng;
+                } else {
+                    document.getElementById(`${inputElement.id}_lat`).value = hit.point.lat;
+                    document.getElementById(`${inputElement.id}_lng`).value = hit.point.lng;
+                }
+                
                 dropdown.style.display = 'none';
                 this.updateRoute();
             });
