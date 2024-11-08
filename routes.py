@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
 from extensions import db
-from models import User, Ride, RideStop, Car, Contract
+from models import User, Ride, RideStop, Car, Contract, Passenger
 from sqlalchemy import func, extract, and_, or_
 from datetime import datetime, timedelta
 
@@ -119,6 +119,78 @@ def add_contract():
     
     return redirect(url_for('main.admin_dashboard'))
 
+@main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
+@login_required
+def cancel_ride(ride_id):
+    if current_user.user_type != 'rider':
+        return redirect(url_for('main.index'))
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.rider_id != current_user.id:
+        flash('Unauthorized action.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if ride.status != 'pending':
+        flash('Cannot cancel ride that is not pending.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    ride.status = 'cancelled'
+    db.session.commit()
+    flash('Ride cancelled successfully.')
+    return redirect(url_for('main.rider_dashboard'))
+
+@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
+@login_required
+def accept_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.status != 'pending':
+        return jsonify({'error': 'Ride is no longer available'}), 400
+    
+    ride.driver_id = current_user.id
+    ride.status = 'accepted'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride accepted successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
+@login_required
+def start_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'accepted':
+        return jsonify({'error': 'Cannot start ride that is not accepted'}), 400
+    
+    ride.status = 'in_progress'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride started successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
+@login_required
+def complete_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'in_progress':
+        return jsonify({'error': 'Cannot complete ride that is not in progress'}), 400
+    
+    ride.status = 'completed'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride completed successfully'})
+
 @main_bp.route('/book-ride', methods=['GET', 'POST'])
 @login_required
 def book_ride():
@@ -159,47 +231,27 @@ def book_ride():
                 distance=float(request.form.get('distance')),
                 fare=float(request.form.get('distance')) * 2 + 5,
                 route_data=request.form.get('route_data'),
+                pickup_address=request.form.get('pickup'),
+                dropoff_address=request.form.get('dropoff'),
                 status='pending'
             )
             
             db.session.add(ride)
             db.session.flush()
             
-            pickup_stop = RideStop(
-                ride_id=ride.id,
-                sequence=0,
-                lat=float(request.form.get('pickup_lat')),
-                lng=float(request.form.get('pickup_lng')),
-                address=request.form.get('pickup'),
-                stop_type='pickup'
-            )
-            db.session.add(pickup_stop)
+            # Add passengers
+            passenger_names = request.form.getlist('passenger_name[]')
+            passenger_emails = request.form.getlist('passenger_email[]')
+            passenger_phones = request.form.getlist('passenger_phone[]')
             
-            stop_lats = request.form.getlist('stop_lat[]')
-            stop_lngs = request.form.getlist('stop_lng[]')
-            stop_addresses = request.form.getlist('stop_address[]')
-            
-            for i, (lat, lng, addr) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
-                if lat and lng:
-                    stop = RideStop(
-                        ride_id=ride.id,
-                        sequence=i,
-                        lat=float(lat),
-                        lng=float(lng),
-                        address=addr,
-                        stop_type='stop'
-                    )
-                    db.session.add(stop)
-            
-            dropoff_stop = RideStop(
-                ride_id=ride.id,
-                sequence=len(stop_lats) + 1,
-                lat=float(request.form.get('dropoff_lat')),
-                lng=float(request.form.get('dropoff_lng')),
-                address=request.form.get('dropoff'),
-                stop_type='dropoff'
-            )
-            db.session.add(dropoff_stop)
+            for name, email, phone in zip(passenger_names, passenger_emails, passenger_phones):
+                passenger = Passenger(
+                    ride_id=ride.id,
+                    name=name,
+                    email=email,
+                    phone=phone
+                )
+                db.session.add(passenger)
             
             db.session.commit()
             flash('Ride booked successfully!')
@@ -274,82 +326,10 @@ def book_ride():
         available_cars.append((contract, car_status))
 
     return render_template('book_ride.html',
-                         datetime=datetime,  # Pass datetime module to template
+                         datetime=datetime,
                          now=datetime.now(),
                          contracts=contracts,
                          available_cars=available_cars)
-
-@main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
-@login_required
-def cancel_ride(ride_id):
-    if current_user.user_type != 'rider':
-        return redirect(url_for('main.index'))
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.rider_id != current_user.id:
-        flash('Unauthorized action.')
-        return redirect(url_for('main.rider_dashboard'))
-    
-    if ride.status != 'pending':
-        flash('Cannot cancel ride that is not pending.')
-        return redirect(url_for('main.rider_dashboard'))
-    
-    ride.status = 'cancelled'
-    db.session.commit()
-    flash('Ride cancelled successfully.')
-    return redirect(url_for('main.rider_dashboard'))
-
-@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
-@login_required
-def accept_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.status != 'pending':
-        return jsonify({'error': 'Ride is no longer available'}), 400
-    
-    ride.driver_id = current_user.id
-    ride.status = 'accepted'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride accepted successfully'})
-
-@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
-@login_required
-def start_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.driver_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    if ride.status != 'accepted':
-        return jsonify({'error': 'Cannot start ride that is not accepted'}), 400
-    
-    ride.status = 'in_progress'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride started successfully'})
-
-@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
-@login_required
-def complete_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.driver_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    if ride.status != 'in_progress':
-        return jsonify({'error': 'Cannot complete ride that is not in progress'}), 400
-    
-    ride.status = 'completed'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride completed successfully'})
 
 @main_bp.route('/ride/<int:ride_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -372,6 +352,7 @@ def edit_ride(ride_id):
             if pickup_datetime < datetime.now():
                 raise ValueError("Pickup time must be in the future")
             
+            # Update basic ride details
             ride.pickup_datetime = pickup_datetime
             ride.pickup_lat = float(request.form.get('pickup_lat'))
             ride.pickup_lng = float(request.form.get('pickup_lng'))
@@ -380,61 +361,90 @@ def edit_ride(ride_id):
             ride.distance = float(request.form.get('distance'))
             ride.fare = float(request.form.get('distance')) * 2 + 5
             ride.route_data = request.form.get('route_data')
+            ride.pickup_address = request.form.get('pickup')
+            ride.dropoff_address = request.form.get('dropoff')
             
-            # Update stops
-            for stop in ride.stops:
-                db.session.delete(stop)
+            # Update contract if changed
+            new_contract_id = request.form.get('contract_id')
+            if new_contract_id and int(new_contract_id) != ride.contract_id:
+                contract = Contract.query.get(new_contract_id)
+                if not contract or contract.user_id != current_user.id:
+                    raise ValueError("Invalid contract selected")
+                ride.contract_id = contract.id
+                ride.car_id = contract.car_id
             
-            # Add new pickup stop
-            pickup_stop = RideStop(
-                ride_id=ride.id,
-                sequence=0,
-                lat=float(request.form.get('pickup_lat')),
-                lng=float(request.form.get('pickup_lng')),
-                address=request.form.get('pickup'),
-                stop_type='pickup'
-            )
-            db.session.add(pickup_stop)
+            # Update passengers
+            # First, remove existing passengers
+            for passenger in ride.passengers:
+                db.session.delete(passenger)
             
-            # Add intermediate stops
-            stop_lats = request.form.getlist('stop_lat[]')
-            stop_lngs = request.form.getlist('stop_lng[]')
-            stop_addresses = request.form.getlist('stop_address[]')
+            # Add new passengers
+            passenger_names = request.form.getlist('passenger_name[]')
+            passenger_emails = request.form.getlist('passenger_email[]')
+            passenger_phones = request.form.getlist('passenger_phone[]')
             
-            for i, (lat, lng, addr) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
-                if lat and lng:
-                    stop = RideStop(
-                        ride_id=ride.id,
-                        sequence=i,
-                        lat=float(lat),
-                        lng=float(lng),
-                        address=addr,
-                        stop_type='stop'
-                    )
-                    db.session.add(stop)
-            
-            # Add dropoff stop
-            dropoff_stop = RideStop(
-                ride_id=ride.id,
-                sequence=len(stop_lats) + 1,
-                lat=float(request.form.get('dropoff_lat')),
-                lng=float(request.form.get('dropoff_lng')),
-                address=request.form.get('dropoff'),
-                stop_type='dropoff'
-            )
-            db.session.add(dropoff_stop)
+            for name, email, phone in zip(passenger_names, passenger_emails, passenger_phones):
+                passenger = Passenger(
+                    ride_id=ride.id,
+                    name=name,
+                    email=email,
+                    phone=phone
+                )
+                db.session.add(passenger)
             
             db.session.commit()
             flash('Ride updated successfully!')
             return redirect(url_for('main.rider_dashboard'))
             
+        except ValueError as e:
+            flash(str(e))
+            return redirect(url_for('main.edit_ride', ride_id=ride_id))
         except Exception as e:
             db.session.rollback()
             flash(f'Error updating ride: {str(e)}')
             return redirect(url_for('main.edit_ride', ride_id=ride_id))
     
     # For GET request
+    contracts = Contract.query.filter_by(user_id=current_user.id).all()
+    pickup_datetime = ride.pickup_datetime
+    
+    available_cars = []
+    for contract in contracts:
+        monthly_usage = db.session.query(func.sum(Ride.distance)).filter(
+            Ride.contract_id == contract.id,
+            Ride.status == 'completed',
+            extract('year', Ride.created_at) == pickup_datetime.year,
+            extract('month', Ride.created_at) == pickup_datetime.month
+        ).scalar() or 0
+        
+        # Check timing
+        pickup_time = pickup_datetime.time()
+        working_days = [int(d) for d in contract.working_days.split(',')]
+        is_working_day = pickup_datetime.weekday() + 1 in working_days
+        is_working_hours = contract.daily_start_time <= pickup_time <= contract.daily_end_time
+        
+        car_status = {
+            'monthly_usage': monthly_usage,
+            'available': True,
+            'selectable': True,
+            'warning': None,
+            'overtime': False
+        }
+        
+        if monthly_usage >= contract.monthly_km_limit:
+            car_status['warning'] = f'Monthly limit exceeded ({monthly_usage:.1f}/{contract.monthly_km_limit} km)'
+        elif not is_working_day:
+            car_status['warning'] = 'Not a working day for this contract'
+            car_status['overtime'] = True
+        elif not is_working_hours:
+            car_status['warning'] = 'Outside contract hours - Overtime charges apply'
+            car_status['overtime'] = True
+        
+        available_cars.append((contract, car_status))
+    
     return render_template('edit_ride.html',
-                         ride=ride,
-                         datetime=datetime,
-                         now=datetime.now())
+                        ride=ride,
+                        contracts=contracts,
+                        available_cars=available_cars,
+                        datetime=datetime,
+                        now=datetime.now())
