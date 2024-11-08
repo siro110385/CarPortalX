@@ -55,7 +55,7 @@ class MapManager {
             }
 
             const data = await response.json();
-            console.log('Geocoding response:', data); // For debugging
+            console.log('Geocoding response:', data);
 
             if (data.hits && data.hits.length > 0) {
                 this.showAutocompleteResults(data.hits, inputElement);
@@ -208,6 +208,26 @@ class MapManager {
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
                 
+                // Check car availability after route update
+                const pickupDatetime = document.getElementById('pickup_datetime').value;
+                if (pickupDatetime) {
+                    const response = await fetch('/book-ride?' + new URLSearchParams({
+                        pickup_datetime: pickupDatetime
+                    }));
+                    
+                    if (!response.ok) throw new Error('Failed to check availability');
+                    
+                    const html = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    const availableCarsSection = doc.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                    if (availableCarsSection) {
+                        const currentSection = document.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                        currentSection.innerHTML = availableCarsSection.innerHTML;
+                    }
+                }
+                
                 document.getElementById('estimated_duration').value = routeData.duration / 60;
                 document.getElementById('route_data').value = JSON.stringify(routeData.route);
                 document.getElementById('bookButton').disabled = false;
@@ -258,3 +278,36 @@ class MapManager {
         }
     }
 }
+
+// Add event listener for pickup datetime changes after DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    const pickupDatetime = document.getElementById('pickup_datetime');
+    if (pickupDatetime) {
+        pickupDatetime.addEventListener('change', async function() {
+            try {
+                const response = await fetch('/book-ride?' + new URLSearchParams({
+                    pickup_datetime: this.value
+                }));
+                
+                if (!response.ok) throw new Error('Failed to check availability');
+                
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Update available cars section
+                const availableCarsSection = doc.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                if (availableCarsSection) {
+                    const currentSection = document.querySelector('.mb-3:has(label:contains("Available Cars"))');
+                    currentSection.innerHTML = availableCarsSection.innerHTML;
+                }
+            } catch (error) {
+                console.error('Error checking availability:', error);
+                const mapInstance = document.querySelector('#map')?.__mapManager;
+                if (mapInstance) {
+                    mapInstance.showError('Failed to check car availability');
+                }
+            }
+        });
+    }
+});
