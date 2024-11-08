@@ -20,6 +20,7 @@
                     <th>Route Details</th>
                     <th>Distance</th>
                     <th>Fare</th>
+                    <th>Passengers</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -44,6 +45,7 @@
                     </td>
                     <td>{{ '%.2f'|format(ride.distance|float) }} km</td>
                     <td>${{ '%.2f'|format(ride.fare|float) }}</td>
+                    <td>{{ ride.passengers|length }}</td>
                     <td>
                         {% if ride.status == 'pending' %}
                             <form method="POST" action="{{ url_for('main.cancel_ride', ride_id=ride.id) }}" style="display:inline;">
@@ -51,12 +53,73 @@
                             </form>
                             <a href="{{ url_for('main.edit_ride', ride_id=ride.id) }}" class="btn btn-sm btn-primary">Edit</a>
                         {% endif %}
+                        <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#rideDetails{{ ride.id }}">
+                            View Details
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    <!-- Ride Details Modals -->
+    {% for ride in rides %}
+    <div class="modal fade" id="rideDetails{{ ride.id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ride Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <p><strong>Status:</strong> {{ ride.status }}</p>
+                            <p><strong>Date:</strong> {{ ride.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            <p><strong>Pickup Time:</strong> {{ ride.pickup_datetime.strftime('%Y-%m-%d %H:%M') }}</p>
+                            <p><strong>Distance:</strong> {{ '%.2f'|format(ride.distance|float) }} km</p>
+                            <p><strong>Fare:</strong> ${{ '%.2f'|format(ride.fare|float) }}</p>
+                            <p><strong>Driver:</strong> {{ ride.driver.username if ride.driver else 'Not assigned' }}</p>
+                            <p><strong>Car:</strong> {{ ride.car.model }} ({{ ride.car.license_plate }})</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Route Details</h6>
+                            <p><strong>Pickup:</strong> {{ ride.stops[0].address if ride.stops else ride.pickup_address }}</p>
+                            {% for stop in ride.stops[1:-1] %}
+                                <p><strong>Stop {{ loop.index }}:</strong> {{ stop.address }}</p>
+                            {% endfor %}
+                            <p><strong>Drop-off:</strong> {{ ride.stops[-1].address if ride.stops else ride.dropoff_address }}</p>
+                        </div>
+                    </div>
+                    
+                    <h6 class="mt-4">Passengers</h6>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for passenger in ride.passengers %}
+                                <tr>
+                                    <td>{{ passenger.name }}</td>
+                                    <td>{{ passenger.email }}</td>
+                                    <td>{{ passenger.phone }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
 
     <h3 class="mt-4">Your Contracts</h3>
     <div class="table-responsive">
