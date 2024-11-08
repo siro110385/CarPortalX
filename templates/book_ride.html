@@ -54,6 +54,39 @@
                     <p id="fare" class="form-control-static">$0.00</p>
                 </div>
 
+                <!-- Passengers Section -->
+                <div class="mb-3">
+                    <label class="form-label">Passengers</label>
+                    <div id="passengers-list"></div>
+                    <button type="button" class="btn btn-secondary mb-3" id="addPassenger">
+                        <i class="fas fa-plus"></i> Add Passenger
+                    </button>
+                </div>
+
+                <template id="passenger-template">
+                    <div class="passenger-entry mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <label class="form-label">Name</label>
+                                    <input type="text" class="form-control" name="passenger_name[]" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" name="passenger_email[]" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Phone</label>
+                                    <input type="tel" class="form-control" name="passenger_phone[]" required>
+                                </div>
+                                <button type="button" class="btn btn-danger remove-passenger">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Available Cars Section -->
                 <div class="mb-3">
                     <label class="form-label">Available Cars</label>
@@ -136,13 +169,29 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Make sure Leaflet is loaded before map.js -->
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const map = new MapManager('map');
     map.initStops();
+    
+    // Initialize passenger management
+    const addPassengerBtn = document.getElementById('addPassenger');
+    const passengersList = document.getElementById('passengers-list');
+    const template = document.getElementById('passenger-template');
+    
+    if (addPassengerBtn && passengersList && template) {
+        addPassengerBtn.addEventListener('click', () => {
+            const passengerEntry = template.content.cloneNode(true);
+            passengersList.appendChild(passengerEntry);
+            
+            const removeBtn = passengersList.lastElementChild.querySelector('.remove-passenger');
+            removeBtn.addEventListener('click', (e) => {
+                e.target.closest('.passenger-entry').remove();
+            });
+        });
+    }
     
     // Add input event listeners
     const pickupInput = document.getElementById('pickup');
