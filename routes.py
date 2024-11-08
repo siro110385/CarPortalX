@@ -274,6 +274,7 @@ def book_ride():
         available_cars.append((contract, car_status))
 
     return render_template('book_ride.html',
+                         datetime=datetime,  # Pass datetime module to template
                          now=datetime.now(),
                          contracts=contracts,
                          available_cars=available_cars)
