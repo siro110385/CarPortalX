@@ -350,3 +350,91 @@ def complete_ride(ride_id):
     db.session.commit()
     
     return jsonify({'message': 'Ride completed successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_ride(ride_id):
+    if current_user.user_type != 'rider':
+        return redirect(url_for('main.index'))
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.rider_id != current_user.id:
+        flash('Unauthorized access.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if ride.status != 'pending':
+        flash('Only pending rides can be edited.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if request.method == 'POST':
+        try:
+            pickup_datetime = datetime.strptime(request.form.get('pickup_datetime'), '%Y-%m-%dT%H:%M')
+            if pickup_datetime < datetime.now():
+                raise ValueError("Pickup time must be in the future")
+            
+            ride.pickup_datetime = pickup_datetime
+            ride.pickup_lat = float(request.form.get('pickup_lat'))
+            ride.pickup_lng = float(request.form.get('pickup_lng'))
+            ride.dropoff_lat = float(request.form.get('dropoff_lat'))
+            ride.dropoff_lng = float(request.form.get('dropoff_lng'))
+            ride.distance = float(request.form.get('distance'))
+            ride.fare = float(request.form.get('distance')) * 2 + 5
+            ride.route_data = request.form.get('route_data')
+            
+            # Update stops
+            for stop in ride.stops:
+                db.session.delete(stop)
+            
+            # Add new pickup stop
+            pickup_stop = RideStop(
+                ride_id=ride.id,
+                sequence=0,
+                lat=float(request.form.get('pickup_lat')),
+                lng=float(request.form.get('pickup_lng')),
+                address=request.form.get('pickup'),
+                stop_type='pickup'
+            )
+            db.session.add(pickup_stop)
+            
+            # Add intermediate stops
+            stop_lats = request.form.getlist('stop_lat[]')
+            stop_lngs = request.form.getlist('stop_lng[]')
+            stop_addresses = request.form.getlist('stop_address[]')
+            
+            for i, (lat, lng, addr) in enumerate(zip(stop_lats, stop_lngs, stop_addresses), 1):
+                if lat and lng:
+                    stop = RideStop(
+                        ride_id=ride.id,
+                        sequence=i,
+                        lat=float(lat),
+                        lng=float(lng),
+                        address=addr,
+                        stop_type='stop'
+                    )
+                    db.session.add(stop)
+            
+            # Add dropoff stop
+            dropoff_stop = RideStop(
+                ride_id=ride.id,
+                sequence=len(stop_lats) + 1,
+                lat=float(request.form.get('dropoff_lat')),
+                lng=float(request.form.get('dropoff_lng')),
+                address=request.form.get('dropoff'),
+                stop_type='dropoff'
+            )
+            db.session.add(dropoff_stop)
+            
+            db.session.commit()
+            flash('Ride updated successfully!')
+            return redirect(url_for('main.rider_dashboard'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating ride: {str(e)}')
+            return redirect(url_for('main.edit_ride', ride_id=ride_id))
+    
+    # For GET request
+    return render_template('edit_ride.html',
+                         ride=ride,
+                         datetime=datetime,
+                         now=datetime.now())

@@ -1,6 +1,6 @@
 from app import app
 from extensions import db
-from models import User, Car, Contract
+from models import User, Car, Contract, Ride, RideStop
 from datetime import datetime, time, timedelta
 
 def create_sample_data():
@@ -13,25 +13,39 @@ def create_sample_data():
     admin.set_password('admin123')
     db.session.add(admin)
     
-    # Create cars
-    car1 = Car(model='Toyota Camry', license_plate='ABC123')
-    car2 = Car(model='Honda Civic', license_plate='XYZ789')
-    db.session.add_all([car1, car2])
-    db.session.commit()
-    
-    # Create test rider account
+    # Create test rider
     rider = User(
-        email='test@example.com',
+        email='rider@example.com',
         username='testrider',
         user_type='rider'
     )
-    rider.set_password('test123')
+    rider.set_password('rider123')
     db.session.add(rider)
+    
+    # Create test driver
+    driver = User(
+        email='driver@example.com',
+        username='testdriver',
+        user_type='driver'
+    )
+    driver.set_password('driver123')
+    db.session.add(driver)
+    
+    # Create cars
+    car1 = Car(
+        model='Toyota Camry',
+        license_plate='ABC123'
+    )
+    car2 = Car(
+        model='Honda Civic',
+        license_plate='XYZ789'
+    )
+    db.session.add_all([car1, car2])
     db.session.commit()
     
-    # Create contract for test rider
+    # Create contract for test driver
     contract = Contract(
-        user_id=rider.id,
+        user_id=driver.id,
         car_id=car1.id,
         monthly_km_limit=1000.0,
         start_date=datetime.now(),
@@ -44,6 +58,7 @@ def create_sample_data():
     db.session.commit()
 
 with app.app_context():
+    # Drop all tables and recreate them
     db.drop_all()
     db.create_all()
     create_sample_data()
