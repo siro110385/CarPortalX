@@ -13,5 +13,4 @@ dependencies = [
     "requests>=2.32.3",
     "python-dotenv>=1.0.1",
     "flask-mail>=0.10.0",
-    "werkzeug",
 ]

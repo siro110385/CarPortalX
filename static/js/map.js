@@ -1,13 +1,45 @@
 class MapManager {
-    constructor(mapId, isEditMode = false) {
+    constructor(mapId) {
         this.map = L.map(mapId).setView([37.7749, -122.4194], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(this.map);
         this.routeLayer = null;
         this.markers = [];
         this.autocompleteDropdowns = {};
         this.currentLocationMarker = null;
-        this.apiKey = document.querySelector('meta[name="ors-api-key"]').content;
-        this.isEditMode = isEditMode;
+        this.apiKey = 'ff70f340-4be6-4d16-a388-2b90824d7eb3';  // GraphHopper API key
+    }
+
+    initStops() {
+        const addStopBtn = document.getElementById('addStop');
+        const stopsContainer = document.getElementById('stops-list');
+        
+        if (addStopBtn && stopsContainer) {
+            addStopBtn.addEventListener('click', () => {
+                const stopEntry = document.createElement('div');
+                stopEntry.className = 'stop-entry mb-3 position-relative';
+                stopEntry.innerHTML = `
+                    <div class="input-group">
+                        <input type="text" class="form-control stop-input" name="stop_address[]" required autocomplete="off">
+                        <button type="button" class="btn btn-danger remove-stop">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <input type="hidden" class="stop-lat" name="stop_lat[]">
+                    <input type="hidden" class="stop-lng" name="stop_lng[]">
+                `;
+                
+                stopsContainer.appendChild(stopEntry);
+                
+                const input = stopEntry.querySelector('.stop-input');
+                this.setupAddressInput(input);
+                
+                const removeBtn = stopEntry.querySelector('.remove-stop');
+                removeBtn.addEventListener('click', () => {
+                    stopEntry.remove();
+                    this.updateRoute();
+                });
+            });
+        }
     }
 
     async searchAddress(query, inputElement) {
@@ -176,39 +208,30 @@ class MapManager {
                 this.displayRoute(routeData.route);
                 this.updateDistanceAndFare(routeData.distance);
                 
-                // Update car availability in edit mode
-                if (this.isEditMode) {
-                    const contractId = document.querySelector('input[name="contract_id"]:checked')?.value;
-                    if (contractId) {
-                        const pickupDatetime = document.getElementById('pickup_datetime').value;
-                        const params = new URLSearchParams({
-                            pickup_datetime: pickupDatetime,
-                            contract_id: contractId
-                        });
-                        
-                        const response = await fetch('/book-ride?' + params);
-                        if (!response.ok) throw new Error('Failed to check availability');
-                        
-                        const html = await response.text();
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(html, 'text/html');
-                        
-                        const availableCarsSection = this.findAvailableCarsSection(doc);
-                        if (availableCarsSection) {
-                            const currentSection = this.findAvailableCarsSection(document);
-                            if (currentSection) {
-                                currentSection.innerHTML = availableCarsSection.innerHTML;
-                                
-                                // Re-select the previously selected contract
-                                const contractInput = document.querySelector(`input[name="contract_id"][value="${contractId}"]`);
-                                if (contractInput) {
-                                    contractInput.checked = true;
-                                }
-                            }
+                // Check car availability after route update using the new helper function
+                const pickupDatetime = document.getElementById('pickup_datetime').value;
+                if (pickupDatetime) {
+                    const response = await fetch('/book-ride?' + new URLSearchParams({
+                        pickup_datetime: pickupDatetime
+                    }));
+                    
+                    if (!response.ok) throw new Error('Failed to check availability');
+                    
+                    const html = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    // Use the new helper function
+                    const availableCarsSection = findAvailableCarsSection(doc);
+                    if (availableCarsSection) {
+                        const currentSection = findAvailableCarsSection(document);
+                        if (currentSection) {
+                            currentSection.innerHTML = availableCarsSection.innerHTML;
                         }
                     }
                 }
                 
+                document.getElementById('estimated_duration').value = routeData.duration / 60;
                 document.getElementById('route_data').value = JSON.stringify(routeData.route);
                 document.getElementById('bookButton').disabled = false;
             }
@@ -251,47 +274,57 @@ class MapManager {
         if (errorDiv) {
             errorDiv.textContent = message;
             errorDiv.style.display = 'block';
+            errorDiv.scrollIntoView({ behavior: 'smooth' });
             setTimeout(() => {
                 errorDiv.style.display = 'none';
-            }, 5000);
+            }, 10000);
         }
-    }
-
-    async reverseGeocode(lat, lng, inputId) {
-        try {
-            const response = await fetch(
-                `https://graphhopper.com/api/1/geocode?point=${lat},${lng}&reverse=true&key=${this.apiKey}`
-            );
-            
-            if (!response.ok) {
-                throw new Error('Reverse geocoding failed');
-            }
-            
-            const data = await response.json();
-            if (data.hits && data.hits.length > 0) {
-                const address = [
-                    data.hits[0].name,
-                    data.hits[0].street,
-                    data.hits[0].city,
-                    data.hits[0].state,
-                    data.hits[0].country
-                ].filter(Boolean).join(', ');
-                
-                document.getElementById(inputId).value = address;
-            }
-        } catch (error) {
-            console.error('Reverse geocoding failed:', error);
-        }
-    }
-
-    findAvailableCarsSection(element) {
-        const sections = element.querySelectorAll('.mb-3');
-        for (const section of sections) {
-            const label = section.querySelector('label');
-            if (label && label.textContent.trim() === 'Available Cars') {
-                return section;
-            }
-        }
-        return null;
     }
 }
+
+// Helper function to find the available cars section
+function findAvailableCarsSection(element) {
+    const sections = element.querySelectorAll('.mb-3');
+    for (const section of sections) {
+        const label = section.querySelector('label');
+        if (label && label.textContent.trim() === 'Available Cars') {
+            return section;
+        }
+    }
+    return null;
+}
+
+// Add event listener for pickup datetime changes after DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    const pickupDatetime = document.getElementById('pickup_datetime');
+    if (pickupDatetime) {
+        pickupDatetime.addEventListener('change', async function() {
+            try {
+                const response = await fetch('/book-ride?' + new URLSearchParams({
+                    pickup_datetime: this.value
+                }));
+                
+                if (!response.ok) throw new Error('Failed to check availability');
+                
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Use the new helper function
+                const availableCarsSection = findAvailableCarsSection(doc);
+                if (availableCarsSection) {
+                    const currentSection = findAvailableCarsSection(document);
+                    if (currentSection) {
+                        currentSection.innerHTML = availableCarsSection.innerHTML;
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking availability:', error);
+                const mapInstance = document.querySelector('#map')?.__mapManager;
+                if (mapInstance) {
+                    mapInstance.showError('Failed to check car availability');
+                }
+            }
+        });
+    }
+});
