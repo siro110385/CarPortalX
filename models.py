@@ -30,6 +30,9 @@ class Car(db.Model):
     license_plate = db.Column(db.String(20), unique=True, nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Add relationship with rides
+    rides = db.relationship('Ride', backref='car', lazy=True)
 
 class Contract(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,6 +49,7 @@ class Contract(db.Model):
     # Add relationships
     user = db.relationship('User', backref='contracts')
     car = db.relationship('Car', backref='contracts')
+    rides = db.relationship('Ride', backref='contract', lazy=True)
 
 class Passenger(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -79,8 +83,6 @@ class Ride(db.Model):
     # Add relationships
     rider = db.relationship('User', foreign_keys=[rider_id], backref='rides_as_rider')
     driver = db.relationship('User', foreign_keys=[driver_id], backref='rides_as_driver')
-    car = db.relationship('Car', backref='rides')
-    contract = db.relationship('Contract', backref='rides')
     stops = db.relationship('RideStop', backref='ride', order_by='RideStop.sequence')
 
 class RideStop(db.Model):
