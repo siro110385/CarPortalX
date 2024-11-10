@@ -31,10 +31,15 @@ class Car(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Add new association table
+contract_cars = db.Table('contract_cars',
+    db.Column('contract_id', db.Integer, db.ForeignKey('contract.id'), primary_key=True),
+    db.Column('car_id', db.Integer, db.ForeignKey('car.id'), primary_key=True)
+)
+
 class Contract(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    car_id = db.Column(db.Integer, db.ForeignKey('car.id'), nullable=False)
     monthly_km_limit = db.Column(db.Float, nullable=False)  # Monthly kilometer budget
     start_date = db.Column(db.DateTime, nullable=False)
     end_date = db.Column(db.DateTime, nullable=False)
@@ -45,7 +50,7 @@ class Contract(db.Model):
     
     # Add relationships
     user = db.relationship('User', backref='contracts')
-    car = db.relationship('Car', backref='contracts')
+    cars = db.relationship('Car', secondary='contract_cars', backref='contracts')
 
 class Passenger(db.Model):
     id = db.Column(db.Integer, primary_key=True)
