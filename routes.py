@@ -11,6 +11,34 @@ main_bp = Blueprint('main', __name__)
 def index():
     return render_template('index.html')
 
+@main_bp.route('/rider/dashboard')
+@login_required
+def rider_dashboard():
+    if current_user.user_type != 'rider':
+        return redirect(url_for('main.index'))
+    
+    # Get user's rides
+    rides = Ride.query.filter_by(rider_id=current_user.id).order_by(Ride.created_at.desc()).all()
+    
+    # Get user's contracts
+    contracts = Contract.query.filter_by(user_id=current_user.id).all()
+    
+    # Calculate monthly usage for each contract
+    monthly_usage = {}
+    for contract in contracts:
+        usage = db.session.query(func.sum(Ride.distance)).filter(
+            Ride.contract_id == contract.id,
+            Ride.status == 'completed',
+            extract('year', Ride.created_at) == datetime.now().year,
+            extract('month', Ride.created_at) == datetime.now().month
+        ).scalar() or 0
+        monthly_usage[contract.id] = usage
+    
+    return render_template('rider/dashboard.html',
+                         rides=rides,
+                         contracts=contracts,
+                         monthly_usage=monthly_usage)
+
 @main_bp.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
