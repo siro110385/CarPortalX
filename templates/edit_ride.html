@@ -12,7 +12,7 @@
                 <div class="mb-3 position-relative">
                     <label for="pickup" class="form-label">Pickup Location</label>
                     <div class="input-group mb-2">
-                        <input type="text" class="form-control" id="pickup" name="pickup" required autocomplete="off">
+                        <input type="text" class="form-control" id="pickup" required autocomplete="off">
                         <button type="button" class="btn btn-secondary" id="useMyLocation">
                             <i class="fas fa-location-arrow"></i> Use My Location
                         </button>
@@ -30,43 +30,10 @@
                 
                 <div class="mb-3 position-relative">
                     <label for="dropoff" class="form-label">Drop-off Location</label>
-                    <input type="text" class="form-control" id="dropoff" name="dropoff" required autocomplete="off">
+                    <input type="text" class="form-control" id="dropoff" required autocomplete="off">
                     <input type="hidden" name="dropoff_lat" id="dropoff_lat" value="{{ ride.dropoff_lat }}">
                     <input type="hidden" name="dropoff_lng" id="dropoff_lng" value="{{ ride.dropoff_lng }}">
                 </div>
-
-                <!-- Passengers Section -->
-                <div class="mb-3">
-                    <label class="form-label">Passengers</label>
-                    <div id="passengers-list"></div>
-                    <button type="button" class="btn btn-secondary mb-3" id="addPassenger">
-                        <i class="fas fa-plus"></i> Add Passenger
-                    </button>
-                </div>
-
-                <template id="passenger-template">
-                    <div class="passenger-entry mb-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="mb-2">
-                                    <label class="form-label">Name</label>
-                                    <input type="text" class="form-control" name="passenger_name[]" required>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Email</label>
-                                    <input type="email" class="form-control" name="passenger_email[]" required>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Phone</label>
-                                    <input type="tel" class="form-control" name="passenger_phone[]" required>
-                                </div>
-                                <button type="button" class="btn btn-danger remove-passenger">
-                                    <i class="fas fa-times"></i> Remove
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </template>
                 
                 <div class="mb-3">
                     <label class="form-label">Distance</label>
@@ -78,48 +45,9 @@
                     <label class="form-label">Estimated Fare</label>
                     <p id="fare" class="form-control-static">${{ '%.2f'|format(ride.fare) }}</p>
                 </div>
-
-                <!-- Available Cars Section -->
-                <div class="mb-3">
-                    <label class="form-label">Available Cars</label>
-                    <div class="row">
-                        {% for contract, car_status in available_cars %}
-                        <div class="col-md-12 mb-3">
-                            <div class="card {% if car_status.warning %}border-warning{% endif %}">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <h5 class="card-title mb-0">{{ contract.car.model }}</h5>
-                                        {% if car_status.warning %}
-                                            <span class="badge {% if car_status.overtime %}bg-warning{% else %}bg-danger{% endif %} text-dark">
-                                                {{ car_status.warning }}
-                                            </span>
-                                        {% endif %}
-                                    </div>
-                                    <p class="card-text mt-2">
-                                        <strong>License:</strong> {{ contract.car.license_plate }}<br>
-                                        <strong>Contract Hours:</strong> {{ contract.daily_start_time.strftime('%I:%M %p') }} - {{ contract.daily_end_time.strftime('%I:%M %p') }}<br>
-                                        <strong>Monthly Limit:</strong> {{ contract.monthly_km_limit }} km<br>
-                                        <strong>Used (Completed Rides):</strong> {{ car_status.monthly_usage|round(2) }} km
-                                    </p>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="contract_id" 
-                                               value="{{ contract.id }}" id="contract_{{ contract.id }}"
-                                               {% if contract.id == ride.contract_id %}checked{% endif %}
-                                               {% if not car_status.selectable %}disabled{% endif %}
-                                               required>
-                                        <label class="form-check-label" for="contract_{{ contract.id }}">
-                                            Select Car
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
                 
                 <input type="hidden" name="route_data" id="route_data" value="{{ ride.route_data|tojson }}">
-                <button type="submit" class="btn btn-primary" id="bookButton">Update Ride</button>
+                <button type="submit" class="btn btn-primary">Update Ride</button>
                 <a href="{{ url_for('main.rider_dashboard') }}" class="btn btn-secondary">Cancel</a>
             </form>
         </div>
@@ -165,7 +93,7 @@
 <script src="{{ url_for('static', filename='js/map.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const map = new MapManager('map', true);  // Pass true for edit mode
+    const map = new MapManager('map');
     
     // Initialize with existing ride data
     const routeData = JSON.parse(document.getElementById('route_data').value || '{}');
@@ -187,55 +115,34 @@ document.addEventListener('DOMContentLoaded', function() {
         map.displayRoute(routeData);
     }
 
-    // Initialize passenger management
-    const addPassengerBtn = document.getElementById('addPassenger');
-    const passengersList = document.getElementById('passengers-list');
-    const template = document.getElementById('passenger-template');
-    
-    // Initialize existing passengers
-    {% for passenger in ride.passengers %}
-        const passengerEntry = template.content.cloneNode(true);
-        passengersList.appendChild(passengerEntry);
-        
-        const nameInput = passengersList.lastElementChild.querySelector('[name="passenger_name[]"]');
-        const emailInput = passengersList.lastElementChild.querySelector('[name="passenger_email[]"]');
-        const phoneInput = passengersList.lastElementChild.querySelector('[name="passenger_phone[]"]');
-        
-        nameInput.value = '{{ passenger.name }}';
-        emailInput.value = '{{ passenger.email }}';
-        phoneInput.value = '{{ passenger.phone }}';
-        
-        const removeBtn = passengersList.lastElementChild.querySelector('.remove-passenger');
-        removeBtn.addEventListener('click', (e) => {
-            e.target.closest('.passenger-entry').remove();
+    function setupAddressInput(input) {
+        input.addEventListener('input', function() {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                const query = this.value.trim();
+                if (query.length >= 3) {
+                    map.searchAddress(query, this);
+                }
+            }, 300);
         });
-    {% endfor %}
 
-    if (addPassengerBtn && passengersList && template) {
-        addPassengerBtn.addEventListener('click', () => {
-            const passengerEntry = template.content.cloneNode(true);
-            passengersList.appendChild(passengerEntry);
-            
-            const removeBtn = passengersList.lastElementChild.querySelector('.remove-passenger');
-            removeBtn.addEventListener('click', (e) => {
-                e.target.closest('.passenger-entry').remove();
-            });
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target)) {
+                const dropdownId = `${input.id}-dropdown`;
+                const dropdown = document.getElementById(dropdownId);
+                if (dropdown) {
+                    dropdown.style.display = 'none';
+                }
+            }
         });
     }
 
-    // Add pickup datetime change handler
-    document.getElementById('pickup_datetime').addEventListener('change', async function() {
-        await map.updateRoute();
-    });
+    let debounceTimeout;
+    setupAddressInput(document.getElementById('pickup'));
+    setupAddressInput(document.getElementById('dropoff'));
 
-    // Add input event listeners for address search
-    const pickupInput = document.getElementById('pickup');
-    const dropoffInput = document.getElementById('dropoff');
-
-    map.setupAddressInput(pickupInput);
-    map.setupAddressInput(dropoffInput);
-
-    // Handle "Use My Location" button
+    // Add click handler for location button
     document.getElementById('useMyLocation').addEventListener('click', function() {
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
@@ -250,7 +157,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Form submission validation
+    // Form submission
     document.getElementById('bookingForm').addEventListener('submit', function(e) {
         const pickupLat = document.getElementById('pickup_lat').value;
         const dropoffLat = document.getElementById('dropoff_lat').value;
