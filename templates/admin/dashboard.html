@@ -176,6 +176,32 @@
     </div>
 </div>
 
+<!-- Edit Car Modal -->
+<div class="modal fade" id="editCarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Car</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCarForm" method="POST">
+                    <input type="hidden" name="_method" value="PUT">
+                    <div class="mb-3">
+                        <label class="form-label">Model</label>
+                        <input type="text" class="form-control" name="model" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">License Plate</label>
+                        <input type="text" class="form-control" name="license_plate" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Add Contract Modal -->
 <div class="modal fade" id="addContractModal" tabindex="-1">
     <div class="modal-dialog">
@@ -240,6 +266,55 @@
     </div>
 </div>
 
+<!-- Edit Contract Modal -->
+<div class="modal fade" id="editContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Contract</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editContractForm" method="POST">
+                    <input type="hidden" name="_method" value="PUT">
+                    <div class="mb-3">
+                        <label class="form-label">Monthly KM Limit</label>
+                        <input type="number" class="form-control" name="monthly_km_limit" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Working Days</label>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="working_days" value="1"> Monday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="2"> Tuesday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="3"> Wednesday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="4"> Thursday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="5"> Friday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="6"> Saturday<br>
+                            <input type="checkbox" class="form-check-input" name="working_days" value="7"> Sunday
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Daily Hours</label>
+                        <div class="row">
+                            <div class="col">
+                                <input type="time" class="form-control" name="daily_start_time" required>
+                            </div>
+                            <div class="col">
+                                <input type="time" class="form-control" name="daily_end_time" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <input type="date" class="form-control" name="end_date" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -266,6 +341,85 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Toggle user status
+    document.querySelectorAll('.toggle-user').forEach(button => {
+        button.addEventListener('click', async function() {
+            const userId = this.dataset.userId;
+            try {
+                const response = await fetch(`/admin/user/${userId}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to update user status');
+                }
+            } catch (error) {
+                console.error('Error toggling user status:', error);
+                alert('Failed to update user status');
+            }
+        });
+    });
+
+    // Edit car functionality
+    document.querySelectorAll('.edit-car').forEach(button => {
+        button.addEventListener('click', function() {
+            const carId = this.dataset.carId;
+            const row = this.closest('tr');
+            const form = document.querySelector('#editCarForm');
+            
+            form.action = `/admin/car/${carId}/edit`;
+            form.querySelector('[name="model"]').value = row.cells[0].textContent;
+            form.querySelector('[name="license_plate"]').value = row.cells[1].textContent;
+        });
+    });
+
+    // Edit contract functionality
+    document.querySelectorAll('.edit-contract').forEach(button => {
+        button.addEventListener('click', function() {
+            const contractId = this.dataset.contractId;
+            const row = this.closest('tr');
+            const form = document.querySelector('#editContractForm');
+            
+            form.action = `/admin/contract/${contractId}/edit`;
+            form.querySelector('[name="monthly_km_limit"]').value = 
+                parseFloat(row.cells[2].textContent);
+            
+            // Set working days
+            const workingDays = row.cells[3].textContent.split(',');
+            form.querySelectorAll('[name="working_days"]').forEach(checkbox => {
+                checkbox.checked = workingDays.includes(checkbox.value);
+            });
+            
+            // Set times
+            const [startTime, endTime] = row.cells[3].textContent.split(' - ');
+            form.querySelector('[name="daily_start_time"]').value = 
+                convertTo24Hour(startTime);
+            form.querySelector('[name="daily_end_time"]').value = 
+                convertTo24Hour(endTime);
+            
+            // Set end date
+            form.querySelector('[name="end_date"]').value = 
+                row.cells[4].textContent;
+        });
+    });
+
+    function convertTo24Hour(time12h) {
+        const [time, modifier] = time12h.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') {
+            hours = '00';
+        }
+        if (modifier === 'PM') {
+            hours = parseInt(hours, 10) + 12;
+        }
+        return `${hours}:${minutes}`;
+    }
 });
 </script>
 {% endblock %}

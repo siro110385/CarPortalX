@@ -84,6 +84,71 @@ def add_car():
     flash('Car added successfully')
     return redirect(url_for('main.admin_dashboard'))
 
+@main_bp.route('/admin/car/<int:car_id>/edit', methods=['POST'])
+@login_required
+def edit_car(car_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    car = Car.query.get_or_404(car_id)
+    car.model = request.form.get('model')
+    car.license_plate = request.form.get('license_plate')
+    
+    try:
+        db.session.commit()
+        flash('Car updated successfully')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating car: {str(e)}')
+    
+    return redirect(url_for('main.admin_dashboard'))
+
+@main_bp.route('/admin/car/<int:car_id>/toggle', methods=['POST'])
+@login_required
+def toggle_car(car_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    car = Car.query.get_or_404(car_id)
+    car.is_active = not car.is_active
+    db.session.commit()
+    
+    return jsonify({'message': 'Car status updated successfully'})
+
+@main_bp.route('/admin/contract/<int:contract_id>/edit', methods=['POST'])
+@login_required
+def edit_contract(contract_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        contract = Contract.query.get_or_404(contract_id)
+        contract.monthly_km_limit = float(request.form.get('monthly_km_limit'))
+        contract.working_days = ','.join(request.form.getlist('working_days'))
+        contract.daily_start_time = datetime.strptime(request.form.get('daily_start_time'), '%H:%M').time()
+        contract.daily_end_time = datetime.strptime(request.form.get('daily_end_time'), '%H:%M').time()
+        contract.end_date = datetime.strptime(request.form.get('end_date'), '%Y-%m-%d')
+        
+        db.session.commit()
+        flash('Contract updated successfully')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating contract: {str(e)}')
+    
+    return redirect(url_for('main.admin_dashboard'))
+
+@main_bp.route('/admin/user/<int:user_id>/toggle', methods=['POST'])
+@login_required
+def toggle_user(user_id):
+    if current_user.user_type != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    user.is_active = not user.is_active
+    db.session.commit()
+    
+    return jsonify({'message': 'User status updated successfully'})
+
 @main_bp.route('/admin/contract/add', methods=['POST'])
 @login_required
 def add_contract():
@@ -119,6 +184,7 @@ def add_contract():
     
     return redirect(url_for('main.admin_dashboard'))
 
+# Restored ride-related routes that were missing from the modified code
 @main_bp.route('/book-ride', methods=['GET', 'POST'])
 @login_required
 def book_ride():
@@ -279,78 +345,6 @@ def book_ride():
                          contracts=contracts,
                          available_cars=available_cars)
 
-@main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
-@login_required
-def cancel_ride(ride_id):
-    if current_user.user_type != 'rider':
-        return redirect(url_for('main.index'))
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.rider_id != current_user.id:
-        flash('Unauthorized action.')
-        return redirect(url_for('main.rider_dashboard'))
-    
-    if ride.status != 'pending':
-        flash('Cannot cancel ride that is not pending.')
-        return redirect(url_for('main.rider_dashboard'))
-    
-    ride.status = 'cancelled'
-    db.session.commit()
-    flash('Ride cancelled successfully.')
-    return redirect(url_for('main.rider_dashboard'))
-
-@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
-@login_required
-def accept_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.status != 'pending':
-        return jsonify({'error': 'Ride is no longer available'}), 400
-    
-    ride.driver_id = current_user.id
-    ride.status = 'accepted'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride accepted successfully'})
-
-@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
-@login_required
-def start_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.driver_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    if ride.status != 'accepted':
-        return jsonify({'error': 'Cannot start ride that is not accepted'}), 400
-    
-    ride.status = 'in_progress'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride started successfully'})
-
-@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
-@login_required
-def complete_ride(ride_id):
-    if current_user.user_type != 'driver':
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    ride = Ride.query.get_or_404(ride_id)
-    if ride.driver_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
-    if ride.status != 'in_progress':
-        return jsonify({'error': 'Cannot complete ride that is not in progress'}), 400
-    
-    ride.status = 'completed'
-    db.session.commit()
-    
-    return jsonify({'message': 'Ride completed successfully'})
-
 @main_bp.route('/ride/<int:ride_id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_ride(ride_id):
@@ -438,3 +432,75 @@ def edit_ride(ride_id):
                          ride=ride,
                          datetime=datetime,
                          now=datetime.now())
+
+@main_bp.route('/ride/<int:ride_id>/cancel', methods=['POST'])
+@login_required
+def cancel_ride(ride_id):
+    if current_user.user_type != 'rider':
+        return redirect(url_for('main.index'))
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.rider_id != current_user.id:
+        flash('Unauthorized action.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    if ride.status != 'pending':
+        flash('Cannot cancel ride that is not pending.')
+        return redirect(url_for('main.rider_dashboard'))
+    
+    ride.status = 'cancelled'
+    db.session.commit()
+    flash('Ride cancelled successfully.')
+    return redirect(url_for('main.rider_dashboard'))
+
+@main_bp.route('/ride/<int:ride_id>/accept', methods=['POST'])
+@login_required
+def accept_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.status != 'pending':
+        return jsonify({'error': 'Ride is no longer available'}), 400
+    
+    ride.driver_id = current_user.id
+    ride.status = 'accepted'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride accepted successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/start', methods=['POST'])
+@login_required
+def start_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'accepted':
+        return jsonify({'error': 'Cannot start ride that is not accepted'}), 400
+    
+    ride.status = 'in_progress'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride started successfully'})
+
+@main_bp.route('/ride/<int:ride_id>/complete', methods=['POST'])
+@login_required
+def complete_ride(ride_id):
+    if current_user.user_type != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    ride = Ride.query.get_or_404(ride_id)
+    if ride.driver_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    if ride.status != 'in_progress':
+        return jsonify({'error': 'Cannot complete ride that is not in progress'}), 400
+    
+    ride.status = 'completed'
+    db.session.commit()
+    
+    return jsonify({'message': 'Ride completed successfully'})
